@@ -359,31 +359,65 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
                 flash('签到活动不存在', 'error')
                 return redirect(url_for('admin_attendance'))
 
-            # Soft delete all related points records
-            cursor.execute('''
-                UPDATE points_records
-                SET is_deleted = 1
-                WHERE session_id = ? AND is_deleted = 0
-            ''', (session_id,))
+            session_ids_to_delete = [session_id]
+            session_codes = [session['activity_code']]
 
-            # Delete all QR codes for this session
-            cursor.execute('DELETE FROM qr_codes WHERE session_id = ?', (session_id,))
+            # Find paired session
+            paired_session_id = session['paired_session_id']
 
-            # Delete all attendance records for this session
-            cursor.execute('DELETE FROM attendance_records WHERE session_id = ?', (session_id,))
+            # If this is a checkout session (has paired_session_id), also delete the checkin
+            if paired_session_id:
+                cursor.execute('SELECT activity_code FROM attendance_sessions WHERE id = ?', (paired_session_id,))
+                paired_session = cursor.fetchone()
+                if paired_session:
+                    session_ids_to_delete.append(paired_session_id)
+                    session_codes.append(paired_session['activity_code'])
 
-            # Update leave requests to remove session_id reference
-            cursor.execute('''
-                UPDATE leave_requests
-                SET session_id = NULL
-                WHERE session_id = ?
-            ''', (session_id,))
+            # If this is a checkin session, find and delete its paired checkout
+            cursor.execute('SELECT id, activity_code FROM attendance_sessions WHERE paired_session_id = ?', (session_id,))
+            checkout_session = cursor.fetchone()
+            if checkout_session:
+                session_ids_to_delete.append(checkout_session['id'])
+                session_codes.append(checkout_session['activity_code'])
 
-            # Delete the session itself
-            cursor.execute('DELETE FROM attendance_sessions WHERE id = ?', (session_id,))
+            # Delete all related data for all sessions
+            for sid in session_ids_to_delete:
+                # Soft delete all related points records
+                cursor.execute('''
+                    UPDATE points_records
+                    SET is_deleted = 1
+                    WHERE session_id = ? AND is_deleted = 0
+                ''', (sid,))
+
+                # Delete all QR codes for this session
+                cursor.execute('DELETE FROM qr_codes WHERE session_id = ?', (sid,))
+
+                # Delete all attendance records for this session
+                cursor.execute('DELETE FROM attendance_records WHERE session_id = ?', (sid,))
+
+                # Update leave requests to remove session_id reference
+                cursor.execute('''
+                    UPDATE leave_requests
+                    SET session_id = NULL
+                    WHERE session_id = ?
+                ''', (sid,))
+
+                # Update leave requests to remove paired_session_id reference
+                cursor.execute('''
+                    UPDATE leave_requests
+                    SET paired_session_id = NULL
+                    WHERE paired_session_id = ?
+                ''', (sid,))
+
+                # Delete the session itself
+                cursor.execute('DELETE FROM attendance_sessions WHERE id = ?', (sid,))
 
             conn.commit()
-            flash(f'签到活动（活动码：{session["activity_code"]}）已删除', 'success')
+
+            if len(session_codes) > 1:
+                flash(f'已删除配对的签到活动（活动码：{", ".join(session_codes)}）', 'success')
+            else:
+                flash(f'签到活动（活动码：{session_codes[0]}）已删除', 'success')
 
         except Exception as e:
             conn.rollback()
@@ -428,6 +462,18 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
 
         session_type = session['session_type']
         paired_session_id = session['paired_session_id']
+
+        # 如果是签退会话，检查配对的签到是否已结束
+        if session_type == 'checkout' and paired_session_id:
+            cursor.execute('''
+                SELECT is_active FROM attendance_sessions WHERE id = ?
+            ''', (paired_session_id,))
+            paired_session = cursor.fetchone()
+
+            if paired_session and paired_session['is_active']:
+                conn.close()
+                flash('必须先结束配对的签到活动，才能结束签退活动', 'warning')
+                return redirect(url_for('admin_attendance'))
 
         # Mark session as inactive
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session_id,))
