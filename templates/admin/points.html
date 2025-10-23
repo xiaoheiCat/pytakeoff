@@ -52,13 +52,97 @@
         </tbody>
     </table>
 </div>
+
+<!-- 积分详情模态框 -->
+<div id="historyModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="position: relative; background: white; margin: 50px auto; padding: 20px; max-width: 800px; border-radius: 8px; max-height: 80vh; overflow-y: auto;">
+        <h3 id="modalTitle">积分详情</h3>
+        <button onclick="closeHistory()" style="position: absolute; top: 10px; right: 10px; background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">关闭</button>
+        <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <p style="margin: 0; font-size: 18px;"><strong>总积分：</strong><span id="totalPoints" style="font-weight: bold; font-size: 24px;"></span></p>
+        </div>
+        <div id="historyList" style="margin-top: 20px;">
+            <p style="text-align: center; color: #95a5a6;">加载中...</p>
+        </div>
+    </div>
+</div>
+
 <script>
 async function viewHistory(userId) {
-    const response = await fetch(`/admin/points/user/${userId}`);
-    const data = await response.json();
-    if (data.success) {
-        alert(`${data.user.name} 的积分详情将在新窗口显示`);
+    const modal = document.getElementById('historyModal');
+    const list = document.getElementById('historyList');
+    const totalPoints = document.getElementById('totalPoints');
+    const modalTitle = document.getElementById('modalTitle');
+
+    modal.style.display = 'block';
+    list.innerHTML = '<p style="text-align: center; color: #95a5a6;">加载中...</p>';
+
+    try {
+        const response = await fetch(`/admin/points/user/${userId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            modalTitle.textContent = `${data.user.name} (${data.user.student_id}) 的积分详情`;
+            const points = data.total_points || 0;
+            totalPoints.textContent = points.toFixed(1);
+            totalPoints.style.color = points >= 0 ? '#27ae60' : '#e74c3c';
+
+            if (data.points_history && data.points_history.length > 0) {
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #f8f9fa;"><th style="padding: 10px; border: 1px solid #ddd;">时间</th><th style="padding: 10px; border: 1px solid #ddd;">分数</th><th style="padding: 10px; border: 1px solid #ddd;">类型</th><th style="padding: 10px; border: 1px solid #ddd;">原因</th><th style="padding: 10px; border: 1px solid #ddd;">操作</th></tr></thead>';
+                html += '<tbody>';
+
+                const typeNames = {
+                    'absence': '缺勤',
+                    'leave': '请假',
+                    'manual': '手动调整',
+                    'manual_leave': '手动标记请假'
+                };
+
+                data.points_history.forEach(record => {
+                    const pointsColor = record.points >= 0 ? '#27ae60' : '#e74c3c';
+                    const typeName = typeNames[record.record_type] || record.record_type;
+                    html += '<tr>';
+                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${record.created_at}</td>`;
+                    html += `<td style="padding: 10px; border: 1px solid #ddd; color: ${pointsColor}; font-weight: bold;">${record.points > 0 ? '+' : ''}${record.points.toFixed(1)}</td>`;
+                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${typeName}</td>`;
+                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${record.reason}</td>`;
+                    html += `<td style="padding: 10px; border: 1px solid #ddd;">`;
+                    if (record.record_type === 'manual' && !record.is_deleted) {
+                        html += `<form method="POST" action="/admin/points/${record.id}/revoke" style="display: inline;" onsubmit="return confirm('确定要撤销此积分记录吗？');">`;
+                        html += '<button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">撤销</button>';
+                        html += '</form>';
+                    } else if (record.is_deleted) {
+                        html += '<span style="color: #95a5a6;">已撤销</span>';
+                    } else {
+                        html += '-';
+                    }
+                    html += '</td>';
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                list.innerHTML = html;
+            } else {
+                list.innerHTML = '<p style="text-align: center; color: #95a5a6;">暂无积分记录</p>';
+            }
+        } else {
+            list.innerHTML = '<p style="text-align: center; color: #e74c3c;">加载失败</p>';
+        }
+    } catch (error) {
+        list.innerHTML = '<p style="text-align: center; color: #e74c3c;">加载失败</p>';
     }
 }
+
+function closeHistory() {
+    document.getElementById('historyModal').style.display = 'none';
+}
+
+// 点击模态框外部关闭
+document.getElementById('historyModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeHistory();
+    }
+});
 </script>
 {% endblock %}
