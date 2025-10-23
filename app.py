@@ -241,6 +241,7 @@ def checkin(qr_token):
 
 @app.route('/complete-checkin')
 @login_required
+@password_change_required
 def complete_checkin():
     """Complete check-in after login"""
     pending_checkin = flask_session.pop('pending_checkin', None)
