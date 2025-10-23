@@ -105,6 +105,88 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         flash(f'签到活动已创建，活动码：{activity_code}', 'success')
         return redirect(url_for('admin_attendance'))
 
+    @app.route('/admin/attendance/<int:session_id>/records')
+    @login_required
+    @admin_required
+    @password_change_required
+    def attendance_records(session_id):
+        """View attendance records for a session"""
+        system_title = get_setting('system_title', '签到系统')
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Get session info
+        cursor.execute('''
+            SELECT ats.*, u.name as created_by_name
+            FROM attendance_sessions ats
+            LEFT JOIN users u ON ats.created_by = u.id
+            WHERE ats.id = ?
+        ''', (session_id,))
+        session = cursor.fetchone()
+
+        if not session:
+            conn.close()
+            flash('签到活动不存在', 'error')
+            return redirect(url_for('admin_attendance'))
+
+        # Get all attendance records
+        cursor.execute('''
+            SELECT ar.*, u.name, u.student_id
+            FROM attendance_records ar
+            JOIN users u ON ar.user_id = u.id
+            WHERE ar.session_id = ?
+            ORDER BY ar.checked_in_at DESC
+        ''', (session_id,))
+        records = cursor.fetchall()
+
+        conn.close()
+
+        return render_template('admin/attendance_records.html',
+                             system_title=system_title,
+                             session=session,
+                             records=records)
+
+    @app.route('/admin/attendance/record/<int:record_id>/delete', methods=['POST'])
+    @login_required
+    @admin_required
+    def delete_attendance_record(record_id):
+        """Delete an attendance record and associated points"""
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Get record info
+        cursor.execute('''
+            SELECT ar.*, u.name, u.student_id
+            FROM attendance_records ar
+            JOIN users u ON ar.user_id = u.id
+            WHERE ar.id = ?
+        ''', (record_id,))
+        record = cursor.fetchone()
+
+        if not record:
+            conn.close()
+            flash('签到记录不存在', 'error')
+            return redirect(url_for('admin_attendance'))
+
+        session_id = record['session_id']
+
+        # Delete associated points records (soft delete)
+        cursor.execute('''
+            UPDATE points_records
+            SET is_deleted = 1
+            WHERE session_id = ? AND user_id = ? AND record_type = 'absence'
+        ''', (session_id, record['user_id']))
+
+        # Delete the attendance record
+        cursor.execute('DELETE FROM attendance_records WHERE id = ?', (record_id,))
+
+        conn.commit()
+        conn.close()
+
+        flash(f'已删除 {record["name"]} 的签到记录', 'success')
+        return redirect(url_for('attendance_records', session_id=session_id))
+
     @app.route('/admin/attendance/<int:session_id>/end', methods=['POST'])
     @login_required
     @admin_required

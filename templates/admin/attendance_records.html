@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}签到记录 - {{ system_title }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>签到记录详情</h2>
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('admin_attendance') }}" class="btn btn-secondary">返回签到列表</a>
+    </div>
+
+    <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+        <h3>签到活动信息</h3>
+        <p><strong>活动码：</strong>{{ session.activity_code }}</p>
+        <p><strong>开始时间：</strong>{{ session.start_time }}</p>
+        <p><strong>结束时间：</strong>{{ session.end_time }}</p>
+        <p><strong>状态：</strong>
+            {% if session.is_active %}
+            <span style="color: #27ae60;">进行中</span>
+            {% else %}
+            <span style="color: #95a5a6;">已结束</span>
+            {% endif %}
+        </p>
+        <p><strong>签到人数：</strong>{{ records|length }}</p>
+    </div>
+
+    <h3>签到记录</h3>
+    {% if records %}
+    <table>
+        <thead>
+            <tr>
+                <th>学号</th>
+                <th>姓名</th>
+                <th>签到时间</th>
+                <th>状态</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                <td>{{ record.student_id }}</td>
+                <td>{{ record.name }}</td>
+                <td>{{ record.checked_in_at }}</td>
+                <td>
+                    {% if record.status == 'present' %}
+                    <span style="color: #27ae60;">已签到</span>
+                    {% elif record.status == 'absent' %}
+                    <span style="color: #e74c3c;">缺勤</span>
+                    {% else %}
+                    {{ record.status }}
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="POST" action="{{ url_for('delete_attendance_record', record_id=record.id) }}" style="display: inline;" onsubmit="return confirm('确定要删除此签到记录吗？关联的积分记录也会被删除。');">
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">删除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: #95a5a6; padding: 20px;">暂无签到记录</p>
+    {% endif %}
+</div>
+{% endblock %}

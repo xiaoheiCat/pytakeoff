@@ -35,6 +35,7 @@
                 <td>{{ session.checked_in_count }} / {{ session.total_users }}</td>
                 <td>{% if session.is_active %}<span style="color: #27ae60;">进行中</span>{% else %}<span style="color: #95a5a6;">已结束</span>{% endif %}</td>
                 <td>
+                    <a href="{{ url_for('attendance_records', session_id=session.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">查看记录</a>
                     {% if session.is_active %}
                     <form method="POST" action="{{ url_for('end_attendance_session', session_id=session.id) }}" style="display: inline;">
                         <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">结束签到</button>
