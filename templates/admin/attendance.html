@@ -9,26 +9,57 @@
     </div>
     <div id="create-form" style="display: none; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
         <h3>发起签到活动</h3>
-        <form method="POST" action="{{ url_for('create_attendance_session') }}">
+        <form method="POST" action="{{ url_for('create_attendance_session') }}" id="attendance-form">
             <div class="form-group">
-                <label>开始时间（留空表示立即开始）</label>
-                <input type="datetime-local" class="form-control" name="start_time">
+                <label>签到开始时间（留空表示立即开始）</label>
+                <input type="datetime-local" class="form-control" name="start_time" id="checkin-start">
             </div>
             <div class="form-group">
-                <label>结束时间（留空表示10分钟后）</label>
-                <input type="datetime-local" class="form-control" name="end_time">
+                <label>签到结束时间（留空表示10分钟后）</label>
+                <input type="datetime-local" class="form-control" name="end_time" id="checkin-end">
             </div>
-            <button type="submit" class="btn btn-success">创建签到</button>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; cursor: pointer;">
+                    <input type="checkbox" name="create_checkout" id="create-checkout" style="margin-right: 8px;" onchange="toggleCheckoutFields()">
+                    <span>同时创建签退活动</span>
+                </label>
+            </div>
+            <div id="checkout-fields" style="display: none; padding: 15px; background: #e8f4f8; border-radius: 4px; margin-top: 10px;">
+                <h4 style="margin-top: 0;">签退设置</h4>
+                <div class="form-group">
+                    <label>签退开始时间（留空表示签到结束后立即开始）</label>
+                    <input type="datetime-local" class="form-control" name="checkout_start_time" id="checkout-start">
+                </div>
+                <div class="form-group">
+                    <label>签退结束时间（留空表示签退开始后10分钟）</label>
+                    <input type="datetime-local" class="form-control" name="checkout_end_time" id="checkout-end">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-success">创建签到活动</button>
             <button type="button" onclick="document.getElementById('create-form').style.display='none'" class="btn btn-secondary">取消</button>
         </form>
     </div>
+    <script>
+    function toggleCheckoutFields() {
+        const checkbox = document.getElementById('create-checkout');
+        const fields = document.getElementById('checkout-fields');
+        fields.style.display = checkbox.checked ? 'block' : 'none';
+    }
+    </script>
     <table>
         <thead>
-            <tr><th>活动码</th><th>开始时间</th><th>结束时间</th><th>签到人数/总人数</th><th>状态</th><th>操作</th></tr>
+            <tr><th>类型</th><th>活动码</th><th>开始时间</th><th>结束时间</th><th>签到人数/总人数</th><th>状态</th><th>操作</th></tr>
         </thead>
         <tbody>
             {% for session in sessions %}
             <tr>
+                <td>
+                    {% if session.session_type == 'checkin' %}
+                    <span style="color: #3498db; font-weight: bold;">签到</span>
+                    {% else %}
+                    <span style="color: #e67e22; font-weight: bold;">签退</span>
+                    {% endif %}
+                </td>
                 <td><strong>{{ session.activity_code }}</strong></td>
                 <td>{{ session.start_time }}</td>
                 <td>{{ session.end_time }}</td>
@@ -38,7 +69,9 @@
                     <a href="{{ url_for('attendance_records', session_id=session.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">查看记录</a>
                     {% if session.is_active %}
                     <form method="POST" action="{{ url_for('end_attendance_session', session_id=session.id) }}" style="display: inline;">
-                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">结束签到</button>
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">
+                            {% if session.session_type == 'checkin' %}结束签到{% else %}结束签退{% endif %}
+                        </button>
                     </form>
                     {% endif %}
                     <form method="POST" action="{{ url_for('delete_attendance_session', session_id=session.id) }}" style="display: inline; margin-left: 5px;" onsubmit="return confirm('确定要删除此签到活动吗？此操作将删除该活动的所有签到记录、二维码及积分记录，且不可恢复。');">

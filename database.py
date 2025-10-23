@@ -47,9 +47,12 @@ def init_db():
             start_time TIMESTAMP NOT NULL,
             end_time TIMESTAMP NOT NULL,
             is_active BOOLEAN DEFAULT 1,
+            session_type TEXT DEFAULT 'checkin',
+            paired_session_id INTEGER,
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (created_by) REFERENCES users(id)
+            FOREIGN KEY (created_by) REFERENCES users(id),
+            FOREIGN KEY (paired_session_id) REFERENCES attendance_sessions(id)
         )
     ''')
 
@@ -74,6 +77,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             session_id INTEGER,
+            paired_session_id INTEGER,
             leave_type TEXT NOT NULL,
             reason TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
@@ -83,6 +87,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id),
+            FOREIGN KEY (paired_session_id) REFERENCES attendance_sessions(id),
             FOREIGN KEY (approved_by) REFERENCES users(id)
         )
     ''')

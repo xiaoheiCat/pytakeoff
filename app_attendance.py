@@ -65,6 +65,9 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         """Create new attendance session"""
         start_time_str = request.form.get('start_time', '').strip()
         end_time_str = request.form.get('end_time', '').strip()
+        create_checkout = request.form.get('create_checkout') == 'on'
+        checkout_start_str = request.form.get('checkout_start_time', '').strip()
+        checkout_end_str = request.form.get('checkout_end_time', '').strip()
 
         # Parse times
         if not start_time_str:
@@ -92,17 +95,71 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # Generate activity code
         activity_code = generate_activity_code()
 
-        # Create session
+        # Create checkin session
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO attendance_sessions (activity_code, start_time, end_time, created_by, is_active)
-            VALUES (?, ?, ?, ?, 1)
+            INSERT INTO attendance_sessions (activity_code, start_time, end_time, created_by, is_active, session_type)
+            VALUES (?, ?, ?, ?, 1, 'checkin')
         ''', (activity_code, start_time, end_time, current_user.id))
-        conn.commit()
-        conn.close()
+        checkin_session_id = cursor.lastrowid
 
-        flash(f'签到活动已创建，活动码：{activity_code}', 'success')
+        # Create paired checkout session if requested
+        if create_checkout:
+            # Parse checkout times
+            if not checkout_start_str:
+                checkout_start = end_time
+            else:
+                try:
+                    checkout_start = datetime.strptime(checkout_start_str, '%Y-%m-%dT%H:%M')
+                except ValueError:
+                    conn.rollback()
+                    conn.close()
+                    flash('签退开始时间格式错误', 'error')
+                    return redirect(url_for('admin_attendance'))
+
+            if not checkout_end_str:
+                checkout_end = checkout_start + timedelta(minutes=10)
+            else:
+                try:
+                    checkout_end = datetime.strptime(checkout_end_str, '%Y-%m-%dT%H:%M')
+                except ValueError:
+                    conn.rollback()
+                    conn.close()
+                    flash('签退结束时间格式错误', 'error')
+                    return redirect(url_for('admin_attendance'))
+
+            # Validate checkout times
+            if checkout_start < end_time:
+                conn.rollback()
+                conn.close()
+                flash('签退开始时间必须晚于或等于签到结束时间', 'error')
+                return redirect(url_for('admin_attendance'))
+
+            if checkout_end <= checkout_start:
+                conn.rollback()
+                conn.close()
+                flash('签退结束时间必须晚于签退开始时间', 'error')
+                return redirect(url_for('admin_attendance'))
+
+            # Generate checkout activity code
+            checkout_code = generate_activity_code()
+
+            # Create checkout session
+            cursor.execute('''
+                INSERT INTO attendance_sessions (activity_code, start_time, end_time, created_by, is_active, session_type, paired_session_id)
+                VALUES (?, ?, ?, ?, 1, 'checkout', ?)
+            ''', (checkout_code, checkout_start, checkout_end, current_user.id, checkin_session_id))
+
+            conn.commit()
+            conn.close()
+
+            flash(f'签到活动已创建，活动码：{activity_code}；签退活动已创建，活动码：{checkout_code}', 'success')
+        else:
+            conn.commit()
+            conn.close()
+            flash(f'签到活动已创建，活动码：{activity_code}', 'success')
+
         return redirect(url_for('admin_attendance'))
 
     @app.route('/admin/attendance/<int:session_id>/records')
@@ -419,27 +476,43 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
             flash(f'还有{pending_count}个待审批的请假申请，请先审批', 'warning')
             return redirect(url_for('admin_leave_approval', session_id=session_id))
 
+        # Get session info
+        cursor.execute('''
+            SELECT id, session_type, paired_session_id
+            FROM attendance_sessions
+            WHERE id = ?
+        ''', (session_id,))
+        session = cursor.fetchone()
+
+        if not session:
+            conn.close()
+            flash('签到活动不存在', 'error')
+            return redirect(url_for('admin_attendance'))
+
+        session_type = session['session_type']
+        paired_session_id = session['paired_session_id']
+
         # Mark session as inactive
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session_id,))
 
-        # 获取所有未签到的用户
-        cursor.execute('''
-            SELECT u.id, u.name, u.student_id
-            FROM users u
-            WHERE u.is_admin = 0
-            AND u.id NOT IN (
-                SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
-            )
-        ''', (session_id,))
-        not_checked_in_users = cursor.fetchall()
+        # 获取所有已批准待使用的请假（根据会话类型查找）
+        if session_type == 'checkin':
+            # 签到会话：查找 session_id 或 paired_session_id 匹配的请假
+            cursor.execute('''
+                SELECT id, user_id, leave_type
+                FROM leave_requests
+                WHERE status = 'approved' AND (session_id = ? OR paired_session_id = ?)
+                ORDER BY approved_at
+            ''', (session_id, session_id))
+        else:
+            # 签退会话：查找 paired_session_id 匹配配对签到的请假
+            cursor.execute('''
+                SELECT id, user_id, leave_type
+                FROM leave_requests
+                WHERE status = 'approved' AND (session_id = ? OR paired_session_id = ?)
+                ORDER BY approved_at
+            ''', (paired_session_id, paired_session_id))
 
-        # 获取所有已批准待使用的请假
-        cursor.execute('''
-            SELECT id, user_id, leave_type
-            FROM leave_requests
-            WHERE status = 'approved'
-            ORDER BY approved_at
-        ''')
         approved_leaves = cursor.fetchall()
 
         # 创建一个字典存储已批准请假的用户
@@ -460,51 +533,176 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         absent_count = 0
         used_leave_count = 0
 
-        # 处理每个未签到的用户
-        for user in not_checked_in_users:
-            user_id = user['id']
+        # 根据会话类型处理缺勤判定和请假状态更新
+        if session_type == 'checkin':
+            # 签到会话：获取所有未签到的用户
+            cursor.execute('''
+                SELECT u.id, u.name, u.student_id
+                FROM users u
+                WHERE u.is_admin = 0
+                AND u.id NOT IN (
+                    SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
+                )
+            ''', (session_id,))
+            not_checked_in_users = cursor.fetchall()
 
-            # 检查该用户是否有已批准的请假
-            if user_id in leave_dict:
-                leave = leave_dict[user_id]
-                leave_type = leave['leave_type']
+            # 处理每个未签到的用户
+            for user in not_checked_in_users:
+                user_id = user['id']
 
-                # 标记请假为已使用
-                cursor.execute('''
-                    UPDATE leave_requests
-                    SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (session_id, leave['id']))
+                # 检查该用户是否有已批准的请假
+                if user_id in leave_dict:
+                    leave = leave_dict[user_id]
+                    leave_type = leave['leave_type']
 
-                # 添加积分记录
-                points = points_map.get(leave_type, 0)
-                if points != 0:
+                    # 标记请假为已使用（同时适用于签到和签退）
+                    if paired_session_id:
+                        # 有配对签退，更新 session_id 和 paired_session_id
+                        cursor.execute('''
+                            UPDATE leave_requests
+                            SET status = 'used', session_id = ?, paired_session_id = ?, used_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        ''', (session_id, paired_session_id, leave['id']))
+                    else:
+                        # 无配对签退
+                        cursor.execute('''
+                            UPDATE leave_requests
+                            SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        ''', (session_id, leave['id']))
+
+                    # 添加积分记录（只在签到时扣一次分）
+                    points = points_map.get(leave_type, 0)
+                    if points != 0:
+                        cursor.execute('''
+                            INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
+                            VALUES (?, ?, ?, 'leave', ?, ?, ?)
+                        ''', (user_id, points, f'{leave_type_names[leave_type]}', session_id, leave['id'], current_user.id))
+
+                    used_leave_count += 1
+                else:
+                    # 无请假，标记为缺勤
                     cursor.execute('''
-                        INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
-                        VALUES (?, ?, ?, 'leave', ?, ?, ?)
-                    ''', (user_id, points, f'{leave_type_names[leave_type]}', session_id, leave['id'], current_user.id))
+                        INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
+                        VALUES (?, ?, 'absent', CURRENT_TIMESTAMP)
+                    ''', (session_id, user_id))
 
-                used_leave_count += 1
-            else:
-                # 无请假，标记为缺勤
-                cursor.execute('''
-                    INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
-                    VALUES (?, ?, 'absent', CURRENT_TIMESTAMP)
-                ''', (session_id, user_id))
+                    # 扣除缺勤积分
+                    absent_points = float(get_setting('absent_points', '-2'))
+                    cursor.execute('''
+                        INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
+                        VALUES (?, ?, ?, 'absence', ?, ?)
+                    ''', (user_id, absent_points, '缺勤', session_id, current_user.id))
 
-                # 扣除缺勤积分
-                absent_points = float(get_setting('absent_points', '-2'))
-                cursor.execute('''
-                    INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
-                    VALUES (?, ?, ?, 'absence', ?, ?)
-                ''', (user_id, absent_points, '缺勤', session_id, current_user.id))
+                    absent_count += 1
 
-                absent_count += 1
+            # 处理已签到但有请假的用户，更新其状态为相应请假类型
+            cursor.execute('''
+                SELECT ar.id, ar.user_id, ar.status
+                FROM attendance_records ar
+                WHERE ar.session_id = ? AND ar.status = 'present'
+            ''', (session_id,))
+            present_records = cursor.fetchall()
+
+            for record in present_records:
+                user_id = record['user_id']
+                if user_id in leave_dict:
+                    leave = leave_dict[user_id]
+                    leave_type = leave['leave_type']
+
+                    # 将已签到记录的状态更新为请假类型
+                    leave_status_map = {
+                        'public': 'public_leave',
+                        'personal': 'personal_leave',
+                        'sick': 'sick_leave'
+                    }
+                    new_status = leave_status_map.get(leave_type)
+
+                    if new_status:
+                        cursor.execute('''
+                            UPDATE attendance_records
+                            SET status = ?
+                            WHERE id = ?
+                        ''', (new_status, record['id']))
+
+        else:  # session_type == 'checkout'
+            # 签退会话：只处理签到了但未签退的用户
+            cursor.execute('''
+                SELECT u.id, u.name, u.student_id
+                FROM users u
+                WHERE u.is_admin = 0
+                AND u.id NOT IN (
+                    SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
+                )
+            ''', (session_id,))
+            not_checked_out_users = cursor.fetchall()
+
+            # 处理每个未签退的用户
+            for user in not_checked_out_users:
+                user_id = user['id']
+
+                # 检查该用户是否有已批准的请假
+                if user_id in leave_dict:
+                    # 有请假，不扣分（已经在签到时处理）
+                    used_leave_count += 1
+                else:
+                    # 检查该用户在配对签到会话中是否签到
+                    cursor.execute('''
+                        SELECT id FROM attendance_records
+                        WHERE session_id = ? AND user_id = ? AND status = 'present'
+                    ''', (paired_session_id, user_id))
+                    checkin_record = cursor.fetchone()
+
+                    if checkin_record:
+                        # 签到了但未签退，标记为缺勤
+                        cursor.execute('''
+                            INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
+                            VALUES (?, ?, 'absent', CURRENT_TIMESTAMP)
+                        ''', (session_id, user_id))
+
+                        # 扣除缺勤积分
+                        absent_points = float(get_setting('absent_points', '-2'))
+                        cursor.execute('''
+                            INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
+                            VALUES (?, ?, ?, 'absence', ?, ?)
+                        ''', (user_id, absent_points, '未签退缺勤', session_id, current_user.id))
+
+                        absent_count += 1
+
+            # 处理已签退但有请假的用户，更新其状态为相应请假类型
+            cursor.execute('''
+                SELECT ar.id, ar.user_id, ar.status
+                FROM attendance_records ar
+                WHERE ar.session_id = ? AND ar.status = 'present'
+            ''', (session_id,))
+            present_records = cursor.fetchall()
+
+            for record in present_records:
+                user_id = record['user_id']
+                if user_id in leave_dict:
+                    leave = leave_dict[user_id]
+                    leave_type = leave['leave_type']
+
+                    # 将已签退记录的状态更新为请假类型
+                    leave_status_map = {
+                        'public': 'public_leave',
+                        'personal': 'personal_leave',
+                        'sick': 'sick_leave'
+                    }
+                    new_status = leave_status_map.get(leave_type)
+
+                    if new_status:
+                        cursor.execute('''
+                            UPDATE attendance_records
+                            SET status = ?
+                            WHERE id = ?
+                        ''', (new_status, record['id']))
 
         conn.commit()
         conn.close()
 
-        flash(f'签到活动已结束，{absent_count}人缺勤，{used_leave_count}人使用请假', 'success')
+        session_type_name = '签到' if session_type == 'checkin' else '签退'
+        flash(f'{session_type_name}活动已结束，{absent_count}人缺勤，{used_leave_count}人使用请假', 'success')
         return redirect(url_for('admin_attendance'))
 
     @app.route('/qr')
