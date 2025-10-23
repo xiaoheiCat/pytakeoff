@@ -6,7 +6,7 @@
     <div style="margin-bottom: 20px;">
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">返回后台</a>
         <button onclick="document.getElementById('add-form').style.display='block'" class="btn btn-success">手动加减分</button>
-        <a href="{{ url_for('export_leave_history') }}" class="btn">导出积分统计</a>
+        <a href="{{ url_for('export_leave_history') }}" class="btn" download>导出积分统计</a>
     </div>
     <div id="add-form" style="display: none; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
         <h3>手动加减分</h3>

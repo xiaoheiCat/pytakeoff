@@ -7,7 +7,7 @@
     <h2>用户管理</h2>
     <div style="margin-bottom: 20px;">
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">返回后台</a>
-        <a href="{{ url_for('download_user_template') }}" class="btn">下载导入模板</a>
+        <a href="{{ url_for('download_user_template') }}" class="btn" download>下载导入模板</a>
         <button onclick="document.getElementById('import-form').style.display='block'" class="btn btn-success">批量导入</button>
         <button onclick="deleteSelected()" class="btn btn-danger">批量删除</button>
     </div>

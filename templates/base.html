@@ -280,37 +280,44 @@
         document.addEventListener('click', function(e) {
             // 检查是否点击了按钮或提交按钮
             const target = e.target;
+
+            // 排除带 no-loading 类的元素
+            if (target.classList.contains('no-loading')) {
+                return;
+            }
+
+            // 排除下载和导出链接（通过 href、download 属性或文本内容判断）
+            if (target.tagName === 'A') {
+                const href = target.getAttribute('href') || '';
+                const text = target.textContent.trim();
+                const hasDownload = target.hasAttribute('download');
+
+                // 排除下载、导出、返回、查看等操作
+                if (hasDownload ||
+                    href.includes('download') ||
+                    href.includes('export') ||
+                    text.includes('下载') ||
+                    text.includes('导出') ||
+                    text.includes('返回') ||
+                    text.includes('查看')) {
+                    return;
+                }
+            }
+
+            // 排除有 onclick 属性的按钮（通常是模态框、下拉等）
+            if (target.tagName === 'BUTTON' && target.onclick) {
+                return;
+            }
+
+            // 排除 type="button" 的按钮
+            if (target.type === 'button') {
+                return;
+            }
+
+            // 检查是否是需要拦截的元素
             if (target.tagName === 'BUTTON' ||
                 (target.tagName === 'INPUT' && target.type === 'submit') ||
                 (target.tagName === 'A' && target.classList.contains('btn'))) {
-
-                // 排除特定不需要加载的按钮
-                if (target.classList.contains('no-loading') ||
-                    target.type === 'button' ||
-                    target.onclick?.toString().includes('return false')) {
-                    return;
-                }
-
-                // 排除下载和导出链接（通过 href 或文本内容判断）
-                if (target.tagName === 'A') {
-                    const href = target.getAttribute('href') || '';
-                    const text = target.textContent || '';
-
-                    // 排除下载、导出、返回等操作
-                    if (href.includes('download') ||
-                        href.includes('export') ||
-                        text.includes('下载') ||
-                        text.includes('导出') ||
-                        text.includes('返回') ||
-                        text.includes('查看')) {
-                        return;
-                    }
-                }
-
-                // 排除有 onclick 属性的按钮（通常是模态框、下拉等）
-                if (target.tagName === 'BUTTON' && target.onclick) {
-                    return;
-                }
 
                 // 显示加载叠加层
                 showLoading();
