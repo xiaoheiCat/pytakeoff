@@ -63,34 +63,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
     @admin_required
     def create_attendance_session():
         """Create new attendance session"""
-        start_time_str = request.form.get('start_time', '').strip()
-        end_time_str = request.form.get('end_time', '').strip()
         create_checkout = request.form.get('create_checkout') == 'on'
-        checkout_start_str = request.form.get('checkout_start_time', '').strip()
-        checkout_end_str = request.form.get('checkout_end_time', '').strip()
-
-        # Parse times
-        if not start_time_str:
-            start_time = datetime.now()
-        else:
-            try:
-                start_time = datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M')
-            except ValueError:
-                flash('开始时间格式错误', 'error')
-                return redirect(url_for('admin_attendance'))
-
-        if not end_time_str:
-            end_time = start_time + timedelta(minutes=10)
-        else:
-            try:
-                end_time = datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M')
-            except ValueError:
-                flash('结束时间格式错误', 'error')
-                return redirect(url_for('admin_attendance'))
-
-        if end_time <= start_time:
-            flash('结束时间必须晚于开始时间', 'error')
-            return redirect(url_for('admin_attendance'))
 
         # Generate activity code
         activity_code = generate_activity_code()
@@ -99,57 +72,21 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO attendance_sessions (activity_code, start_time, end_time, created_by, is_active, session_type)
-            VALUES (?, ?, ?, ?, 1, 'checkin')
-        ''', (activity_code, start_time, end_time, current_user.id))
+            INSERT INTO attendance_sessions (activity_code, created_by, is_active, session_type)
+            VALUES (?, ?, 1, 'checkin')
+        ''', (activity_code, current_user.id))
         checkin_session_id = cursor.lastrowid
 
         # Create paired checkout session if requested
         if create_checkout:
-            # Parse checkout times
-            if not checkout_start_str:
-                checkout_start = end_time
-            else:
-                try:
-                    checkout_start = datetime.strptime(checkout_start_str, '%Y-%m-%dT%H:%M')
-                except ValueError:
-                    conn.rollback()
-                    conn.close()
-                    flash('签退开始时间格式错误', 'error')
-                    return redirect(url_for('admin_attendance'))
-
-            if not checkout_end_str:
-                checkout_end = checkout_start + timedelta(minutes=10)
-            else:
-                try:
-                    checkout_end = datetime.strptime(checkout_end_str, '%Y-%m-%dT%H:%M')
-                except ValueError:
-                    conn.rollback()
-                    conn.close()
-                    flash('签退结束时间格式错误', 'error')
-                    return redirect(url_for('admin_attendance'))
-
-            # Validate checkout times
-            if checkout_start < end_time:
-                conn.rollback()
-                conn.close()
-                flash('签退开始时间必须晚于或等于签到结束时间', 'error')
-                return redirect(url_for('admin_attendance'))
-
-            if checkout_end <= checkout_start:
-                conn.rollback()
-                conn.close()
-                flash('签退结束时间必须晚于签退开始时间', 'error')
-                return redirect(url_for('admin_attendance'))
-
             # Generate checkout activity code
             checkout_code = generate_activity_code()
 
             # Create checkout session
             cursor.execute('''
-                INSERT INTO attendance_sessions (activity_code, start_time, end_time, created_by, is_active, session_type, paired_session_id)
-                VALUES (?, ?, ?, ?, 1, 'checkout', ?)
-            ''', (checkout_code, checkout_start, checkout_end, current_user.id, checkin_session_id))
+                INSERT INTO attendance_sessions (activity_code, created_by, is_active, session_type, paired_session_id)
+                VALUES (?, ?, 1, 'checkout', ?)
+            ''', (checkout_code, current_user.id, checkin_session_id))
 
             conn.commit()
             conn.close()
@@ -724,7 +661,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT id, end_time, is_active
+            SELECT id, is_active
             FROM attendance_sessions
             WHERE activity_code = ?
         ''', (activity_code,))
@@ -737,18 +674,6 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         if not session['is_active']:
             conn.close()
             return jsonify({'success': False, 'message': '该签到活动已结束'})
-
-        # Check if session has expired
-        end_time_str = session['end_time']
-        # Handle both formats: with and without microseconds
-        try:
-            end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S.%f')
-        except ValueError:
-            end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S')
-
-        if datetime.now() > end_time:
-            conn.close()
-            return jsonify({'success': False, 'message': '该签到活动已过期'})
 
         conn.close()
 
@@ -766,7 +691,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
 
         # Verify session exists and is active
         cursor.execute('''
-            SELECT id, end_time, is_active
+            SELECT id, is_active
             FROM attendance_sessions
             WHERE id = ?
         ''', (session_id,))

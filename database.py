@@ -44,8 +44,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS attendance_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             activity_code TEXT UNIQUE NOT NULL,
-            start_time TIMESTAMP NOT NULL,
-            end_time TIMESTAMP NOT NULL,
             is_active BOOLEAN DEFAULT 1,
             session_type TEXT DEFAULT 'checkin',
             paired_session_id INTEGER,
