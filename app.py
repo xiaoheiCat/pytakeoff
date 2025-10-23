@@ -158,10 +158,25 @@ def change_password():
             flash('两次输入的新密码不一致', 'error')
         else:
             current_user.set_password(new_password)
-            flash('密码修改成功', 'success')
-            return redirect(url_for('index'))
+
+            # Check if user was trying to check in via QR code
+            had_pending_checkin = flask_session.pop('pending_checkin', None)
+
+            if had_pending_checkin:
+                # Clear the pending checkin and show rescan message
+                return redirect(url_for('password_changed_rescan'))
+            else:
+                flash('密码修改成功', 'success')
+                return redirect(url_for('index'))
 
     return render_template('change_password.html', system_title=system_title)
+
+@app.route('/password-changed-rescan')
+@login_required
+def password_changed_rescan():
+    """Show message to rescan QR code after password change"""
+    system_title = get_setting('system_title', '签到系统')
+    return render_template('password_changed_rescan.html', system_title=system_title)
 
 @app.route('/checkin/<qr_token>')
 def checkin(qr_token):
