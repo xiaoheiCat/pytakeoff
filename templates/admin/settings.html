@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}系统设置 - {{ system_title }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>系统设置</h2>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary" style="margin-bottom: 20px;">返回后台</a>
+    <form method="POST">
+        <div class="form-group">
+            <label>系统标题</label>
+            <input type="text" class="form-control" name="system_title" value="{{ settings.system_title }}" required>
+        </div>
+        <div class="form-group">
+            <label>二维码刷新间隔（秒）</label>
+            <input type="number" class="form-control" name="qr_refresh_interval" value="{{ settings.qr_refresh_interval }}" required>
+        </div>
+        <h3 style="margin-top: 30px; margin-bottom: 15px;">积分设置</h3>
+        <div class="form-group">
+            <label>公假分值</label>
+            <input type="number" step="0.1" class="form-control" name="public_leave_points" value="{{ settings.public_leave_points }}" required>
+        </div>
+        <div class="form-group">
+            <label>事假分值</label>
+            <input type="number" step="0.1" class="form-control" name="personal_leave_points" value="{{ settings.personal_leave_points }}" required>
+        </div>
+        <div class="form-group">
+            <label>病假分值</label>
+            <input type="number" step="0.1" class="form-control" name="sick_leave_points" value="{{ settings.sick_leave_points }}" required>
+        </div>
+        <div class="form-group">
+            <label>缺勤分值</label>
+            <input type="number" step="0.1" class="form-control" name="absent_points" value="{{ settings.absent_points }}" required>
+        </div>
+        <button type="submit" class="btn btn-success">保存设置</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}签到结果 - {{ system_title }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 100px auto; text-align: center;">
+    <div class="card">
+        {% if success %}
+        <div style="font-size: 72px; color: #27ae60; margin-bottom: 20px;">✓</div>
+        <h2 style="color: #27ae60;">{{ message }}</h2>
+        {% else %}
+        <div style="font-size: 72px; color: #e74c3c; margin-bottom: 20px;">✗</div>
+        <h2 style="color: #e74c3c;">{{ message }}</h2>
+        {% endif %}
+        <p style="margin-top: 20px;">请关闭此页面</p>
+    </div>
+</div>
+{% endblock %}

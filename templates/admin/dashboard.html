@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}管理后台 - {{ system_title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>管理后台</h2>
+    <p>欢迎使用系统管理后台</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 20px;">
+    <div class="card" style="text-align: center;">
+        <h3 style="font-size: 48px; color: #3498db; margin-bottom: 10px;">{{ total_users }}</h3>
+        <p style="color: #666;">用户总数</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <h3 style="font-size: 48px; color: #27ae60; margin-bottom: 10px;">{{ total_sessions }}</h3>
+        <p style="color: #666;">签到活动数</p>
+    </div>
+    <div class="card" style="text-align: center;">
+        <h3 style="font-size: 48px; color: #e74c3c; margin-bottom: 10px;">{{ pending_leaves }}</h3>
+        <p style="color: #666;">待审批请假</p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>快捷操作</h2>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <a href="{{ url_for('admin_users') }}" class="btn">用户管理</a>
+        <a href="{{ url_for('admin_attendance') }}" class="btn">签到管理</a>
+        <a href="{{ url_for('admin_leave') }}" class="btn">请假管理</a>
+        <a href="{{ url_for('admin_points') }}" class="btn">积分管理</a>
+        <a href="{{ url_for('admin_settings') }}" class="btn btn-secondary">系统设置</a>
+    </div>
+</div>
+{% endblock %}

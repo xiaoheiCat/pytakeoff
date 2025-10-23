@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - {{ system_title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>用户管理</h2>
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">返回后台</a>
+        <a href="{{ url_for('download_user_template') }}" class="btn">下载导入模板</a>
+        <button onclick="document.getElementById('import-form').style.display='block'" class="btn btn-success">批量导入</button>
+        <button onclick="deleteSelected()" class="btn btn-danger">批量删除</button>
+    </div>
+
+    <form id="import-form" method="POST" action="{{ url_for('import_users') }}" enctype="multipart/form-data" style="display: none; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
+        <div class="form-group">
+            <label>选择CSV文件</label>
+            <input type="file" name="file" accept=".csv" required>
+        </div>
+        <button type="submit" class="btn btn-success">上传导入</button>
+        <button type="button" onclick="document.getElementById('import-form').style.display='none'" class="btn btn-secondary">取消</button>
+    </form>
+
+    <form id="users-form" method="POST" action="{{ url_for('delete_users') }}">
+        <table>
+            <thead>
+                <tr>
+                    <th><input type="checkbox" onclick="toggleAll(this)"></th>
+                    <th>学工号</th>
+                    <th>姓名</th>
+                    <th>注册时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td><input type="checkbox" name="user_ids" value="{{ user.id }}"></td>
+                    <td>{{ user.student_id }}</td>
+                    <td>{{ user.name }}</td>
+                    <td>{{ user.created_at }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('reset_user_password', user_id=user.id) }}" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="return confirm('确定重置该用户密码为学工号吗？')">重置密码</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+</div>
+
+<script>
+function toggleAll(source) {
+    const checkboxes = document.querySelectorAll('input[name="user_ids"]');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+}
+
+function deleteSelected() {
+    const checked = document.querySelectorAll('input[name="user_ids"]:checked');
+    if (checked.length === 0) {
+        alert('请选择要删除的用户');
+        return;
+    }
+    if (confirm(`确定删除选中的 ${checked.length} 个用户吗？此操作不可恢复！`)) {
+        document.getElementById('users-form').submit();
+    }
+}
+</script>
+{% endblock %}

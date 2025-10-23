@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}请假管理 - {{ system_title }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>请假管理</h2>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary" style="margin-bottom: 20px;">返回后台</a>
+    <table>
+        <thead>
+            <tr><th>姓名</th><th>学工号</th><th>类型</th><th>原因</th><th>状态</th><th>申请时间</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+            {% for req in leave_requests %}
+            <tr>
+                <td>{{ req.user_name }}</td>
+                <td>{{ req.student_id }}</td>
+                <td>{% if req.leave_type == 'public' %}公假{% elif req.leave_type == 'personal' %}事假{% else %}病假{% endif %}</td>
+                <td>{{ req.reason }}</td>
+                <td>
+                    {% if req.status == 'pending' %}<span style="color: #f39c12;">待审批</span>
+                    {% elif req.status == 'approved' %}<span style="color: #27ae60;">已批准</span>
+                    {% else %}<span style="color: #e74c3c;">已拒绝</span>{% endif %}
+                </td>
+                <td>{{ req.created_at }}</td>
+                <td>
+                    {% if req.status == 'pending' %}
+                    <button onclick="viewAttachments({{ req.id }})" class="btn" style="padding: 4px 8px; font-size: 12px;">查看附件</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+async function viewAttachments(leaveId) {
+    const response = await fetch(`/admin/leave/${leaveId}/attachments`);
+    const data = await response.json();
+    if (data.success && data.attachments.length > 0) {
+        alert('共有 ' + data.attachments.length + ' 个附件');
+    } else {
+        alert('无附件');
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}签到大屏 - {{ system_title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: #1a1a1a;
+        color: #fff;
+    }
+    .container {
+        max-width: 100%;
+        padding: 20px;
+    }
+    .qr-screen {
+        display: none;
+    }
+    .qr-screen.active {
+        display: flex;
+        gap: 30px;
+        height: calc(100vh - 200px);
+    }
+    .qr-section {
+        flex: 0 0 45%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #2c3e50;
+        border-radius: 12px;
+        padding: 30px;
+    }
+    .qr-code {
+        width: 100%;
+        max-width: 500px;
+        height: auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    .qr-code img {
+        width: 100%;
+        height: auto;
+    }
+    .countdown {
+        font-size: 24px;
+        color: #3498db;
+        font-weight: bold;
+    }
+    .stats-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    .stats-header {
+        background: #2c3e50;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+    }
+    .stats-count {
+        font-size: 48px;
+        color: #3498db;
+        font-weight: bold;
+    }
+    .name-list {
+        flex: 1;
+        background: #2c3e50;
+        border-radius: 12px;
+        padding: 20px;
+        overflow-y: auto;
+    }
+    .name-item {
+        padding: 12px;
+        background: #34495e;
+        margin-bottom: 10px;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+    }
+    .tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .tab-btn {
+        flex: 1;
+        padding: 15px;
+        background: #34495e;
+        border: none;
+        color: #fff;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+    .tab-btn.active {
+        background: #3498db;
+    }
+    .setup-form {
+        max-width: 500px;
+        margin: 50px auto;
+        background: #2c3e50;
+        padding: 40px;
+        border-radius: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="setup-screen">
+    <div class="setup-form">
+        <h2 style="text-align: center; margin-bottom: 30px;">输入活动码开始签到</h2>
+        <div class="form-group">
+            <label for="activity_code">活动码</label>
+            <input type="text" class="form-control" id="activity_code" placeholder="请输入6位活动码" maxlength="6">
+        </div>
+        <button onclick="startQRDisplay()" class="btn" style="width: 100%;">开始签到</button>
+        <div id="setup-error" style="color: #e74c3c; margin-top: 15px; display: none;"></div>
+    </div>
+</div>
+
+<div id="qr-screen" class="qr-screen">
+    <div class="qr-section">
+        <div id="qr-code" class="qr-code">
+            <div style="text-align: center; padding: 50px; color: #999;">加载中...</div>
+        </div>
+        <div class="countdown">
+            刷新倒计时：<span id="countdown">--</span> 秒
+        </div>
+    </div>
+
+    <div class="stats-section">
+        <div class="stats-header">
+            <div>已签到：<span class="stats-count" id="checked-in-count">0</span> 人</div>
+            <div style="margin-top: 10px;">未签到：<span class="stats-count" style="color: #e74c3c;" id="not-checked-in-count">0</span> 人</div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('checked-in')">已签到</button>
+            <button class="tab-btn" onclick="switchTab('not-checked-in')">未签到</button>
+        </div>
+
+        <div id="checked-in-list" class="name-list"></div>
+        <div id="not-checked-in-list" class="name-list" style="display: none;"></div>
+    </div>
+</div>
+
+<script>
+let sessionId = null;
+let refreshInterval = 15;
+let countdownTimer = null;
+let statusTimer = null;
+let currentTab = 'checked-in';
+
+async function startQRDisplay() {
+    const activityCode = document.getElementById('activity_code').value.trim();
+    const errorDiv = document.getElementById('setup-error');
+
+    if (!activityCode) {
+        errorDiv.textContent = '请输入活动码';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/qr/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({activity_code: activityCode})
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            sessionId = data.session_id;
+            document.getElementById('setup-screen').style.display = 'none';
+            document.getElementById('qr-screen').classList.add('active');
+            startQRRefresh();
+            startStatusRefresh();
+        } else {
+            errorDiv.textContent = data.message;
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        errorDiv.textContent = '网络错误，请重试';
+        errorDiv.style.display = 'block';
+    }
+}
+
+async function refreshQRCode() {
+    try {
+        const response = await fetch(`/api/qr/generate/${sessionId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('qr-code').innerHTML =
+                `<img src="data:image/png;base64,${data.qr_image}" alt="签到二维码">`;
+            refreshInterval = data.refresh_interval;
+            startCountdown();
+        }
+    } catch (error) {
+        console.error('QR refresh error:', error);
+    }
+}
+
+function startCountdown() {
+    let seconds = refreshInterval;
+    document.getElementById('countdown').textContent = seconds;
+
+    if (countdownTimer) clearInterval(countdownTimer);
+
+    countdownTimer = setInterval(() => {
+        seconds--;
+        document.getElementById('countdown').textContent = seconds;
+        if (seconds <= 0) {
+            clearInterval(countdownTimer);
+        }
+    }, 1000);
+}
+
+function startQRRefresh() {
+    refreshQRCode();
+    setInterval(refreshQRCode, refreshInterval * 1000);
+}
+
+async function updateStatus() {
+    try {
+        const response = await fetch(`/api/qr/status/${sessionId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('checked-in-count').textContent = data.checked_in_count;
+            document.getElementById('not-checked-in-count').textContent = data.not_checked_in_count;
+
+            // Update lists
+            updateNameList('checked-in-list', data.checked_in);
+            updateNameList('not-checked-in-list', data.not_checked_in);
+        }
+    } catch (error) {
+        console.error('Status refresh error:', error);
+    }
+}
+
+function updateNameList(elementId, users) {
+    const listElement = document.getElementById(elementId);
+    if (users.length === 0) {
+        listElement.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">暂无数据</div>';
+        return;
+    }
+
+    listElement.innerHTML = users.map(user => `
+        <div class="name-item">
+            <span>${user.name}</span>
+            <span style="color: #95a5a6;">${user.student_id}</span>
+        </div>
+    `).join('');
+}
+
+function startStatusRefresh() {
+    updateStatus();
+    statusTimer = setInterval(updateStatus, 3000);
+}
+
+function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    document.getElementById('checked-in-list').style.display = tab === 'checked-in' ? 'block' : 'none';
+    document.getElementById('not-checked-in-list').style.display = tab === 'not-checked-in' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

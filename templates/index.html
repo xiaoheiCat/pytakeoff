@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}用户首页 - {{ system_title }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>欢迎，{{ current_user.name }}</h2>
+    <p>学工号：{{ current_user.student_id }}</p>
+    <p>当前积分：<strong style="font-size: 24px; color: #3498db;">{{ total_points }}</strong></p>
+    <div style="margin-top: 20px;">
+        <a href="{{ url_for('request_leave') }}" class="btn">请假申请</a>
+        <a href="{{ url_for('change_password') }}" class="btn btn-secondary">修改密码</a>
+    </div>
+</div>
+
+<div class="card">
+    <h2>我的请假记录</h2>
+    {% if leave_requests %}
+    <table>
+        <thead>
+            <tr>
+                <th>请假类型</th>
+                <th>原因</th>
+                <th>状态</th>
+                <th>申请时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in leave_requests %}
+            <tr>
+                <td>
+                    {% if req.leave_type == 'public' %}公假
+                    {% elif req.leave_type == 'personal' %}事假
+                    {% else %}病假{% endif %}
+                </td>
+                <td>{{ req.reason }}</td>
+                <td>
+                    {% if req.status == 'pending' %}
+                    <span style="color: #f39c12;">待审批</span>
+                    {% elif req.status == 'approved' %}
+                    <span style="color: #27ae60;">已批准</span>
+                    {% else %}
+                    <span style="color: #e74c3c;">已拒绝</span>
+                    {% endif %}
+                </td>
+                <td>{{ req.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #999;">暂无请假记录</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>积分记录</h2>
+    {% if points_history %}
+    <table>
+        <thead>
+            <tr>
+                <th>分数</th>
+                <th>原因</th>
+                <th>时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in points_history %}
+            <tr>
+                <td style="{% if record.points > 0 %}color: #27ae60;{% else %}color: #e74c3c;{% endif %} font-weight: bold;">
+                    {{ "%+.1f" | format(record.points) }}
+                </td>
+                <td>{{ record.reason }}</td>
+                <td>{{ record.created_at }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #999;">暂无积分记录</p>
+    {% endif %}
+</div>
+{% endblock %}

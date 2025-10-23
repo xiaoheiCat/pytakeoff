@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}积分管理 - {{ system_title }}{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>积分管理</h2>
+    <div style="margin-bottom: 20px;">
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">返回后台</a>
+        <button onclick="document.getElementById('add-form').style.display='block'" class="btn btn-success">手动加减分</button>
+        <a href="{{ url_for('export_leave_history') }}" class="btn">导出积分统计</a>
+    </div>
+    <div id="add-form" style="display: none; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
+        <h3>手动加减分</h3>
+        <form method="POST" action="{{ url_for('add_points') }}">
+            <div class="form-group">
+                <label>选择用户</label>
+                <select class="form-control" name="user_id" required>
+                    <option value="">请选择</option>
+                    {% for user in users_points %}
+                    <option value="{{ user.id }}">{{ user.name }} ({{ user.student_id }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>分数（正数为加分，负数为扣分）</label>
+                <input type="number" step="0.1" class="form-control" name="points" required>
+            </div>
+            <div class="form-group">
+                <label>理由</label>
+                <input type="text" class="form-control" name="reason" required>
+            </div>
+            <button type="submit" class="btn btn-success">提交</button>
+            <button type="button" onclick="document.getElementById('add-form').style.display='none'" class="btn btn-secondary">取消</button>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr><th>学工号</th><th>姓名</th><th>总积分</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+            {% for user in users_points %}
+            <tr>
+                <td>{{ user.student_id }}</td>
+                <td>{{ user.name }}</td>
+                <td style="font-weight: bold; {% if user.total_points >= 0 %}color: #27ae60;{% else %}color: #e74c3c;{% endif %}">
+                    {{ "%.1f" | format(user.total_points) }}
+                </td>
+                <td>
+                    <button onclick="viewHistory({{ user.id }})" class="btn" style="padding: 4px 8px; font-size: 12px;">查看详情</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+async function viewHistory(userId) {
+    const response = await fetch(`/admin/points/user/${userId}`);
+    const data = await response.json();
+    if (data.success) {
+        alert(`${data.user.name} 的积分详情将在新窗口显示`);
+    }
+}
+</script>
+{% endblock %}
