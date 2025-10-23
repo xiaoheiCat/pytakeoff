@@ -183,7 +183,8 @@ async function startQRDisplay() {
         const response = await fetch('/api/qr/start', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({activity_code: activityCode})
+            body: JSON.stringify({activity_code: activityCode}),
+            noLoading: true
         });
 
         const data = await response.json();
@@ -206,7 +207,9 @@ async function startQRDisplay() {
 
 async function refreshQRCode() {
     try {
-        const response = await fetch(`/api/qr/generate/${sessionId}`);
+        const response = await fetch(`/api/qr/generate/${sessionId}`, {
+            noLoading: true
+        });
         const data = await response.json();
 
         if (data.success) {
@@ -242,7 +245,9 @@ function startQRRefresh() {
 
 async function updateStatus() {
     try {
-        const response = await fetch(`/api/qr/status/${sessionId}`);
+        const response = await fetch(`/api/qr/status/${sessionId}`, {
+            noLoading: true
+        });
         const data = await response.json();
 
         if (data.success) {
