@@ -187,6 +187,61 @@ def register_leave_points_routes(app, admin_required, password_change_required):
             return redirect(url_for('admin_leave_approval', session_id=session_id))
         return redirect(url_for('admin_leave'))
 
+    @app.route('/admin/leave/<int:leave_id>/delete', methods=['POST'])
+    @login_required
+    @admin_required
+    def delete_leave(leave_id):
+        """Delete entire leave request with all related data"""
+        import os
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        try:
+            # Get leave request
+            cursor.execute('SELECT * FROM leave_requests WHERE id = ?', (leave_id,))
+            leave_request = cursor.fetchone()
+
+            if not leave_request:
+                flash('请假申请不存在', 'error')
+                return redirect(url_for('admin_leave'))
+
+            # Get all attachments before deleting
+            cursor.execute('SELECT filepath FROM leave_attachments WHERE leave_request_id = ?', (leave_id,))
+            attachments = cursor.fetchall()
+
+            # Soft delete related points records
+            cursor.execute('''
+                UPDATE points_records
+                SET is_deleted = 1
+                WHERE leave_request_id = ?
+            ''', (leave_id,))
+
+            # Delete attachments from database (CASCADE will handle this)
+            # But we need to delete physical files first
+            for attachment in attachments:
+                filepath = attachment['filepath']
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception as e:
+                        # Log error but continue with deletion
+                        print(f"Failed to delete file {filepath}: {e}")
+
+            # Delete leave request (CASCADE will delete attachments)
+            cursor.execute('DELETE FROM leave_requests WHERE id = ?', (leave_id,))
+
+            conn.commit()
+            flash('请假记录已删除', 'success')
+
+        except Exception as e:
+            conn.rollback()
+            flash(f'删除失败: {str(e)}', 'error')
+        finally:
+            conn.close()
+
+        return redirect(url_for('admin_leave'))
+
     @app.route('/admin/attendance/<int:session_id>/manual-status', methods=['POST'])
     @login_required
     @admin_required
