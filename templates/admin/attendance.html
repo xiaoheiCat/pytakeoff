@@ -41,6 +41,9 @@
                         <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">结束签到</button>
                     </form>
                     {% endif %}
+                    <form method="POST" action="{{ url_for('delete_attendance_session', session_id=session.id) }}" style="display: inline; margin-left: 5px;" onsubmit="return confirm('确定要删除此签到活动吗？此操作将删除该活动的所有签到记录、二维码及积分记录，且不可恢复。');">
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; background: #c0392b;">删除活动</button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

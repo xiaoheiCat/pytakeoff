@@ -53,7 +53,7 @@
                     <span style="color: #95a5a6;">已处理</span>
                     {% endif %}
                     <form method="POST" action="{{ url_for('delete_leave', leave_id=req.id) }}" style="display: inline; margin-left: 5px;" onsubmit="return confirm('确定要删除此请假记录吗？此操作将删除该请假记录、相关附件及积分记录，且不可恢复。');">
-                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; background: #c0392b;">🗑️ 删除</button>
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; background: #c0392b;">删除</button>
                     </form>
                 </td>
             </tr>

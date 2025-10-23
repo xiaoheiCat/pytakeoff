@@ -346,45 +346,56 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         flash(f'已为 {user["name"]} 添加签到记录：{status_names[status]}', 'success')
         return redirect(url_for('attendance_records', session_id=session_id))
 
-    @app.route('/admin/attendance/record/<int:record_id>/delete', methods=['POST'])
+    @app.route('/admin/attendance/<int:session_id>/delete', methods=['POST'])
     @login_required
     @admin_required
-    def delete_attendance_record(record_id):
-        """Delete an attendance record and associated points"""
+    def delete_attendance_session(session_id):
+        """Delete entire attendance session with all related data"""
         conn = get_db()
         cursor = conn.cursor()
 
-        # Get record info
-        cursor.execute('''
-            SELECT ar.*, u.name, u.student_id
-            FROM attendance_records ar
-            JOIN users u ON ar.user_id = u.id
-            WHERE ar.id = ?
-        ''', (record_id,))
-        record = cursor.fetchone()
+        try:
+            # Get session info
+            cursor.execute('SELECT * FROM attendance_sessions WHERE id = ?', (session_id,))
+            session = cursor.fetchone()
 
-        if not record:
+            if not session:
+                flash('签到活动不存在', 'error')
+                return redirect(url_for('admin_attendance'))
+
+            # Soft delete all related points records
+            cursor.execute('''
+                UPDATE points_records
+                SET is_deleted = 1
+                WHERE session_id = ? AND is_deleted = 0
+            ''', (session_id,))
+
+            # Delete all QR codes for this session
+            cursor.execute('DELETE FROM qr_codes WHERE session_id = ?', (session_id,))
+
+            # Delete all attendance records for this session
+            cursor.execute('DELETE FROM attendance_records WHERE session_id = ?', (session_id,))
+
+            # Update leave requests to remove session_id reference
+            cursor.execute('''
+                UPDATE leave_requests
+                SET session_id = NULL
+                WHERE session_id = ?
+            ''', (session_id,))
+
+            # Delete the session itself
+            cursor.execute('DELETE FROM attendance_sessions WHERE id = ?', (session_id,))
+
+            conn.commit()
+            flash(f'签到活动（活动码：{session["activity_code"]}）已删除', 'success')
+
+        except Exception as e:
+            conn.rollback()
+            flash(f'删除失败: {str(e)}', 'error')
+        finally:
             conn.close()
-            flash('签到记录不存在', 'error')
-            return redirect(url_for('admin_attendance'))
 
-        session_id = record['session_id']
-
-        # Delete associated points records (soft delete)
-        cursor.execute('''
-            UPDATE points_records
-            SET is_deleted = 1
-            WHERE session_id = ? AND user_id = ? AND is_deleted = 0
-        ''', (session_id, record['user_id']))
-
-        # Delete the attendance record
-        cursor.execute('DELETE FROM attendance_records WHERE id = ?', (record_id,))
-
-        conn.commit()
-        conn.close()
-
-        flash(f'已删除 {record["name"]} 的签到记录', 'success')
-        return redirect(url_for('attendance_records', session_id=session_id))
+        return redirect(url_for('admin_attendance'))
 
     @app.route('/admin/attendance/<int:session_id>/end', methods=['POST'])
     @login_required
