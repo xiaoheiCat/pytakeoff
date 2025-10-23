@@ -68,6 +68,7 @@ def init_db():
     ''')
 
     # Leave requests table
+    # Status: pending(待审批), rejected(未通过), approved(已批准待使用), used(已使用)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS leave_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +79,7 @@ def init_db():
             status TEXT DEFAULT 'pending',
             approved_by INTEGER,
             approved_at TIMESTAMP,
+            used_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id),

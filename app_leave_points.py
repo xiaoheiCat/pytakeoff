@@ -151,36 +151,18 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         new_status = 'approved' if action == 'approve' else 'rejected'
         cursor.execute('''
             UPDATE leave_requests
-            SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP, session_id = ?
+            SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        ''', (new_status, current_user.id, session_id, leave_id))
+        ''', (new_status, current_user.id, leave_id))
 
-        # If approved, add points based on leave type
-        if action == 'approve':
-            leave_type = leave_request['leave_type']
-            points_map = {
-                'public': float(get_setting('public_leave_points', '0')),
-                'personal': float(get_setting('personal_leave_points', '-1')),
-                'sick': float(get_setting('sick_leave_points', '-0.5'))
-            }
-            points = points_map.get(leave_type, 0)
-
-            leave_type_names = {
-                'public': '公假',
-                'personal': '事假',
-                'sick': '病假'
-            }
-
-            cursor.execute('''
-                INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
-                VALUES (?, ?, ?, 'leave', ?, ?, ?)
-            ''', (leave_request['user_id'], points, f'{leave_type_names[leave_type]}审批通过',
-                  session_id, leave_id, current_user.id))
+        # 注意：批准时不再关联session_id和添加积分，而是在结束活动时才处理
 
         conn.commit()
         conn.close()
 
-        flash(f'请假申请已{new_status}', 'success')
+        # Translate status to Chinese
+        status_text = '批准' if new_status == 'approved' else '拒绝'
+        flash(f'请假申请已{status_text}', 'success')
 
         # Redirect back to approval page if session_id provided
         if session_id:

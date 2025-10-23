@@ -175,10 +175,62 @@
         .tab-content.active {
             display: block;
         }
+
+        /* 全局加载叠加层 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .loading-overlay.show {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #fff;
+            font-size: 16px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .loading-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- 全局加载叠加层 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">加载中...</div>
+        </div>
+    </div>
     <div class="header">
         <div class="header-content">
             <h1>{{ system_title }}</h1>
@@ -210,6 +262,96 @@
         {% block content %}{% endblock %}
     </div>
 
+    <script>
+        // 全局加载叠加层控制
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        // 显示加载叠加层
+        function showLoading() {
+            loadingOverlay.classList.add('show');
+        }
+
+        // 隐藏加载叠加层
+        function hideLoading() {
+            loadingOverlay.classList.remove('show');
+        }
+
+        // 自动拦截所有按钮点击
+        document.addEventListener('click', function(e) {
+            // 检查是否点击了按钮或提交按钮
+            const target = e.target;
+            if (target.tagName === 'BUTTON' ||
+                (target.tagName === 'INPUT' && target.type === 'submit') ||
+                (target.tagName === 'A' && target.classList.contains('btn'))) {
+
+                // 排除特定不需要加载的按钮（如取消按钮、返回按钮等）
+                if (target.classList.contains('no-loading') ||
+                    target.type === 'button' ||
+                    target.onclick?.toString().includes('return false')) {
+                    return;
+                }
+
+                // 显示加载叠加层
+                showLoading();
+
+                // 如果是表单提交，等待表单提交完成
+                const form = target.closest('form');
+                if (form) {
+                    // 如果表单有 onsubmit 返回 false，则隐藏加载层
+                    setTimeout(() => {
+                        if (form.onsubmit && form.onsubmit() === false) {
+                            hideLoading();
+                        }
+                    }, 100);
+                }
+            }
+        }, true);
+
+        // 自动拦截所有表单提交
+        document.addEventListener('submit', function(e) {
+            const form = e.target;
+
+            // 排除 AJAX 表单或特殊标记的表单
+            if (form.classList.contains('no-loading') || form.dataset.ajax === 'true') {
+                return;
+            }
+
+            // 显示加载叠加层
+            showLoading();
+        }, true);
+
+        // 页面加载完成后隐藏加载层（防止页面刷新时一直显示）
+        window.addEventListener('load', function() {
+            hideLoading();
+        });
+
+        // 页面离开前显示加载层
+        window.addEventListener('beforeunload', function() {
+            // 只有在正常导航时显示，刷新页面时不显示
+            if (performance.navigation.type !== 1) {
+                showLoading();
+            }
+        });
+
+        // 页面显示时隐藏加载层（处理浏览器后退等情况）
+        window.addEventListener('pageshow', function() {
+            hideLoading();
+        });
+
+        // AJAX 请求前后的钩子（如果使用 fetch）
+        const originalFetch = window.fetch;
+        window.fetch = function(...args) {
+            const fetchPromise = originalFetch.apply(this, args);
+
+            // 如果请求选项中没有标记不显示加载
+            if (!args[1]?.noLoading) {
+                showLoading();
+                fetchPromise.finally(() => hideLoading());
+            }
+
+            return fetchPromise;
+        };
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

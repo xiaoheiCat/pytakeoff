@@ -136,7 +136,9 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
             FROM attendance_records ar
             JOIN users u ON ar.user_id = u.id
             WHERE ar.session_id = ?
-            ORDER BY ar.checked_in_at DESC
+            ORDER BY
+                CASE WHEN ar.checked_in_at IS NULL THEN 1 ELSE 0 END,
+                ar.checked_in_at DESC
         ''', (session_id,))
         records = cursor.fetchall()
 
@@ -420,7 +422,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # Mark session as inactive
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session_id,))
 
-        # Get all users who didn't check in and don't have approved leave
+        # 获取所有未签到的用户
         cursor.execute('''
             SELECT u.id, u.name, u.student_id
             FROM users u
@@ -428,32 +430,81 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
             AND u.id NOT IN (
                 SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
             )
-            AND u.id NOT IN (
-                SELECT lr.user_id FROM leave_requests lr
-                WHERE lr.session_id = ? AND lr.status = 'approved'
-            )
-        ''', (session_id, session_id))
-        absent_users = cursor.fetchall()
+        ''', (session_id,))
+        not_checked_in_users = cursor.fetchall()
 
-        # Record absences and deduct points
-        absent_points = float(get_setting('absent_points', '-2'))
-        for user in absent_users:
-            # Record absence
-            cursor.execute('''
-                INSERT INTO attendance_records (session_id, user_id, status)
-                VALUES (?, ?, 'absent')
-            ''', (session_id, user['id']))
+        # 获取所有已批准待使用的请假
+        cursor.execute('''
+            SELECT id, user_id, leave_type
+            FROM leave_requests
+            WHERE status = 'approved'
+            ORDER BY approved_at
+        ''')
+        approved_leaves = cursor.fetchall()
 
-            # Deduct points
-            cursor.execute('''
-                INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
-                VALUES (?, ?, ?, 'absence', ?, ?)
-            ''', (user['id'], absent_points, '缺勤', session_id, current_user.id))
+        # 创建一个字典存储已批准请假的用户
+        leave_dict = {leave['user_id']: leave for leave in approved_leaves}
+
+        # 积分和请假类型映射
+        points_map = {
+            'public': float(get_setting('public_leave_points', '0')),
+            'personal': float(get_setting('personal_leave_points', '-1')),
+            'sick': float(get_setting('sick_leave_points', '-0.5'))
+        }
+        leave_type_names = {
+            'public': '公假',
+            'personal': '事假',
+            'sick': '病假'
+        }
+
+        absent_count = 0
+        used_leave_count = 0
+
+        # 处理每个未签到的用户
+        for user in not_checked_in_users:
+            user_id = user['id']
+
+            # 检查该用户是否有已批准的请假
+            if user_id in leave_dict:
+                leave = leave_dict[user_id]
+                leave_type = leave['leave_type']
+
+                # 标记请假为已使用
+                cursor.execute('''
+                    UPDATE leave_requests
+                    SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (session_id, leave['id']))
+
+                # 添加积分记录
+                points = points_map.get(leave_type, 0)
+                if points != 0:
+                    cursor.execute('''
+                        INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
+                        VALUES (?, ?, ?, 'leave', ?, ?, ?)
+                    ''', (user_id, points, f'{leave_type_names[leave_type]}', session_id, leave['id'], current_user.id))
+
+                used_leave_count += 1
+            else:
+                # 无请假，标记为缺勤
+                cursor.execute('''
+                    INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
+                    VALUES (?, ?, 'absent', CURRENT_TIMESTAMP)
+                ''', (session_id, user_id))
+
+                # 扣除缺勤积分
+                absent_points = float(get_setting('absent_points', '-2'))
+                cursor.execute('''
+                    INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
+                    VALUES (?, ?, ?, 'absence', ?, ?)
+                ''', (user_id, absent_points, '缺勤', session_id, current_user.id))
+
+                absent_count += 1
 
         conn.commit()
         conn.close()
 
-        flash(f'签到活动已结束，{len(absent_users)}人缺勤', 'success')
+        flash(f'签到活动已结束，{absent_count}人缺勤，{used_leave_count}人使用请假', 'success')
         return redirect(url_for('admin_attendance'))
 
     @app.route('/qr')

@@ -38,9 +38,11 @@
                     {% if req.status == 'pending' %}
                     <span style="color: #f39c12;">待审批</span>
                     {% elif req.status == 'approved' %}
-                    <span style="color: #27ae60;">已批准</span>
+                    <span style="color: #3498db;">待使用</span>
+                    {% elif req.status == 'used' %}
+                    <span style="color: #27ae60;">已使用</span>
                     {% else %}
-                    <span style="color: #e74c3c;">已拒绝</span>
+                    <span style="color: #e74c3c;">未通过</span>
                     {% endif %}
                 </td>
                 <td>{{ req.created_at }}</td>
