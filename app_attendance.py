@@ -140,12 +140,211 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         ''', (session_id,))
         records = cursor.fetchall()
 
+        # Get users who haven't checked in
+        cursor.execute('''
+            SELECT u.id, u.name, u.student_id
+            FROM users u
+            WHERE u.is_admin = 0
+            AND u.id NOT IN (
+                SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
+            )
+            ORDER BY u.student_id
+        ''', (session_id,))
+        not_checked_in = cursor.fetchall()
+
         conn.close()
 
         return render_template('admin/attendance_records.html',
                              system_title=system_title,
                              session=session,
-                             records=records)
+                             records=records,
+                             not_checked_in=not_checked_in)
+
+    @app.route('/admin/attendance/record/<int:record_id>/update', methods=['POST'])
+    @login_required
+    @admin_required
+    def update_attendance_status(record_id):
+        """Update attendance record status"""
+        new_status = request.form.get('status', '').strip()
+
+        valid_statuses = ['present', 'absent', 'public_leave', 'personal_leave', 'sick_leave']
+        if new_status not in valid_statuses:
+            flash('无效的状态', 'error')
+            return redirect(url_for('admin_attendance'))
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Get current record info
+        cursor.execute('''
+            SELECT ar.*, u.name, u.student_id
+            FROM attendance_records ar
+            JOIN users u ON ar.user_id = u.id
+            WHERE ar.id = ?
+        ''', (record_id,))
+        record = cursor.fetchone()
+
+        if not record:
+            conn.close()
+            flash('签到记录不存在', 'error')
+            return redirect(url_for('admin_attendance'))
+
+        old_status = record['status']
+        session_id = record['session_id']
+        user_id = record['user_id']
+
+        # If status unchanged, do nothing
+        if old_status == new_status:
+            conn.close()
+            flash('状态未改变', 'warning')
+            return redirect(url_for('attendance_records', session_id=session_id))
+
+        # Update attendance record status
+        cursor.execute('''
+            UPDATE attendance_records
+            SET status = ?
+            WHERE id = ?
+        ''', (new_status, record_id))
+
+        # Soft delete old points records for this session and user
+        cursor.execute('''
+            UPDATE points_records
+            SET is_deleted = 1
+            WHERE session_id = ? AND user_id = ? AND is_deleted = 0
+        ''', (session_id, user_id))
+
+        # Add new points record based on new status
+        points = 0
+        reason = ''
+        record_type = 'manual'
+
+        if new_status == 'present':
+            # Present: no points change
+            points = 0
+            reason = '管理员标记为已签到'
+        elif new_status == 'absent':
+            points = float(get_setting('absent_points', '-2'))
+            reason = '管理员标记为缺勤'
+            record_type = 'absence'
+        elif new_status == 'public_leave':
+            points = float(get_setting('public_leave_points', '0'))
+            reason = '管理员标记为公假'
+            record_type = 'manual_leave'
+        elif new_status == 'personal_leave':
+            points = float(get_setting('personal_leave_points', '-1'))
+            reason = '管理员标记为事假'
+            record_type = 'manual_leave'
+        elif new_status == 'sick_leave':
+            points = float(get_setting('sick_leave_points', '-0.5'))
+            reason = '管理员标记为病假'
+            record_type = 'manual_leave'
+
+        # Insert new points record if points != 0
+        if points != 0:
+            cursor.execute('''
+                INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, points, reason, record_type, session_id, current_user.id))
+
+        conn.commit()
+        conn.close()
+
+        status_names = {
+            'present': '已签到',
+            'absent': '缺勤',
+            'public_leave': '公假',
+            'personal_leave': '事假',
+            'sick_leave': '病假'
+        }
+        flash(f'已将 {record["name"]} 的状态修改为：{status_names[new_status]}', 'success')
+        return redirect(url_for('attendance_records', session_id=session_id))
+
+    @app.route('/admin/attendance/<int:session_id>/add_record', methods=['POST'])
+    @login_required
+    @admin_required
+    def add_attendance_record(session_id):
+        """Manually add attendance record for a user"""
+        user_id = request.form.get('user_id', '').strip()
+        status = request.form.get('status', 'present').strip()
+
+        valid_statuses = ['present', 'absent', 'public_leave', 'personal_leave', 'sick_leave']
+        if status not in valid_statuses:
+            flash('无效的状态', 'error')
+            return redirect(url_for('attendance_records', session_id=session_id))
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        # Check if user exists
+        cursor.execute('SELECT id, name FROM users WHERE id = ?', (user_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            conn.close()
+            flash('用户不存在', 'error')
+            return redirect(url_for('attendance_records', session_id=session_id))
+
+        # Check if record already exists
+        cursor.execute('''
+            SELECT id FROM attendance_records
+            WHERE session_id = ? AND user_id = ?
+        ''', (session_id, user_id))
+        existing = cursor.fetchone()
+
+        if existing:
+            conn.close()
+            flash(f'{user["name"]} 已有签到记录', 'warning')
+            return redirect(url_for('attendance_records', session_id=session_id))
+
+        # Insert attendance record
+        cursor.execute('''
+            INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (session_id, user_id, status))
+
+        # Add points record based on status
+        points = 0
+        reason = ''
+        record_type = 'manual'
+
+        if status == 'present':
+            points = 0
+            reason = '管理员手动添加签到'
+        elif status == 'absent':
+            points = float(get_setting('absent_points', '-2'))
+            reason = '管理员标记为缺勤'
+            record_type = 'absence'
+        elif status == 'public_leave':
+            points = float(get_setting('public_leave_points', '0'))
+            reason = '管理员标记为公假'
+            record_type = 'manual_leave'
+        elif status == 'personal_leave':
+            points = float(get_setting('personal_leave_points', '-1'))
+            reason = '管理员标记为事假'
+            record_type = 'manual_leave'
+        elif status == 'sick_leave':
+            points = float(get_setting('sick_leave_points', '-0.5'))
+            reason = '管理员标记为病假'
+            record_type = 'manual_leave'
+
+        if points != 0:
+            cursor.execute('''
+                INSERT INTO points_records (user_id, points, reason, record_type, session_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, points, reason, record_type, session_id, current_user.id))
+
+        conn.commit()
+        conn.close()
+
+        status_names = {
+            'present': '已签到',
+            'absent': '缺勤',
+            'public_leave': '公假',
+            'personal_leave': '事假',
+            'sick_leave': '病假'
+        }
+        flash(f'已为 {user["name"]} 添加签到记录：{status_names[status]}', 'success')
+        return redirect(url_for('attendance_records', session_id=session_id))
 
     @app.route('/admin/attendance/record/<int:record_id>/delete', methods=['POST'])
     @login_required
@@ -175,7 +374,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         cursor.execute('''
             UPDATE points_records
             SET is_deleted = 1
-            WHERE session_id = ? AND user_id = ? AND record_type = 'absence'
+            WHERE session_id = ? AND user_id = ? AND is_deleted = 0
         ''', (session_id, record['user_id']))
 
         # Delete the attendance record
