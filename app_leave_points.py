@@ -380,6 +380,8 @@ def register_leave_points_routes(app, admin_required, password_change_required):
             SELECT
                 u.student_id as '学工号',
                 u.name as '姓名',
+                COALESCE(SUM(CASE WHEN pr.record_type = 'checkin' AND pr.is_deleted = 0
+                    THEN pr.points ELSE 0 END), 0) as '签到积分',
                 COALESCE(SUM(CASE WHEN pr.record_type = 'leave' AND pr.leave_request_id IN
                     (SELECT id FROM leave_requests WHERE leave_type = 'public') AND pr.is_deleted = 0
                     THEN pr.points ELSE 0 END), 0) as '公假分值',
@@ -410,12 +412,12 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         writer = csv.writer(output)
 
         # Write header
-        writer.writerow(['学工号', '姓名', '公假分值', '事假分值', '病假分值', '缺勤分值', '手动加分', '手动扣分', '总分'])
+        writer.writerow(['学工号', '姓名', '签到积分', '公假分值', '事假分值', '病假分值', '缺勤分值', '手动加分', '手动扣分', '总分'])
 
         # Write data
         for row in data:
             writer.writerow([
-                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]
+                row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9]
             ])
 
         output.seek(0)
@@ -438,6 +440,7 @@ def register_leave_points_routes(app, admin_required, password_change_required):
             # Update settings
             set_setting('system_title', request.form.get('system_title', '签到系统'))
             set_setting('qr_refresh_interval', request.form.get('qr_refresh_interval', '15'))
+            set_setting('checkin_points', request.form.get('checkin_points', '1'))
             set_setting('public_leave_points', request.form.get('public_leave_points', '0'))
             set_setting('personal_leave_points', request.form.get('personal_leave_points', '-1'))
             set_setting('sick_leave_points', request.form.get('sick_leave_points', '-0.5'))
@@ -449,6 +452,7 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         settings = {
             'system_title': get_setting('system_title', '签到系统'),
             'qr_refresh_interval': get_setting('qr_refresh_interval', '15'),
+            'checkin_points': get_setting('checkin_points', '1'),
             'public_leave_points': get_setting('public_leave_points', '0'),
             'personal_leave_points': get_setting('personal_leave_points', '-1'),
             'sick_leave_points': get_setting('sick_leave_points', '-0.5'),

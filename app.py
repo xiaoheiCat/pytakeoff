@@ -231,6 +231,14 @@ def checkin(qr_token):
         VALUES (?, ?, 'present')
     ''', (session_id, current_user.id))
 
+    # Add points for successful check-in
+    checkin_points = float(get_setting('checkin_points', '1'))
+    if checkin_points != 0:
+        cursor.execute('''
+            INSERT INTO points_records (user_id, points, reason, record_type, session_id)
+            VALUES (?, ?, '签到成功', 'checkin', ?)
+        ''', (current_user.id, checkin_points, session_id))
+
     conn.commit()
     conn.close()
 

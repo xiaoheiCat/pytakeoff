@@ -149,6 +149,7 @@ def init_db():
     default_settings = {
         'system_title': os.getenv('SYSTEM_TITLE', '签到系统'),
         'qr_refresh_interval': os.getenv('QR_REFRESH_INTERVAL', '15'),
+        'checkin_points': '1',
         'public_leave_points': '0',
         'personal_leave_points': '-1',
         'sick_leave_points': '-0.5',
