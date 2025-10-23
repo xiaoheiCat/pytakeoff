@@ -66,9 +66,6 @@
                             <option value="sick_leave">病假</option>
                         </select>
                     </form>
-                    <form method="POST" action="{{ url_for('delete_attendance_record', record_id=record.id) }}" style="display: inline; margin-left: 5px;" onsubmit="return confirm('确定要删除此签到记录吗？关联的积分记录也会被删除。');">
-                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">删除</button>
-                    </form>
                 </td>
             </tr>
             {% endfor %}
