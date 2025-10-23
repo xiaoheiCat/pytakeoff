@@ -166,7 +166,7 @@ def change_password():
                 # Clear the pending checkin and show rescan message
                 return redirect(url_for('password_changed_rescan'))
             else:
-                flash('密码修改成功', 'success')
+                flash('密码修改成功。如果您正在签到，请重新扫描二维码以完成签到。', 'success')
                 return redirect(url_for('index'))
 
     return render_template('change_password.html', system_title=system_title)

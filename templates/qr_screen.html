@@ -148,6 +148,21 @@
 </div>
 
 <script>
+// 禁用全局加载层 - 二维码大屏不需要加载提示
+document.addEventListener('DOMContentLoaded', function() {
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none !important';
+        loadingOverlay.classList.remove('show');
+    }
+});
+
+// 覆盖全局的 showLoading 函数
+window.showLoading = function() {
+    // 在二维码大屏页面不显示加载层
+    return;
+};
+
 let sessionId = null;
 let refreshInterval = 15;
 let countdownTimer = null;
