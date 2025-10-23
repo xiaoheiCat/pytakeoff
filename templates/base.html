@@ -319,19 +319,15 @@
                 (target.tagName === 'INPUT' && target.type === 'submit') ||
                 (target.tagName === 'A' && target.classList.contains('btn'))) {
 
-                // 显示加载叠加层
-                showLoading();
-
-                // 如果是表单提交，等待表单提交完成
+                // 如果是表单内的按钮，不在这里显示加载层
+                // 让表单的 submit 事件来处理
                 const form = target.closest('form');
                 if (form) {
-                    // 如果表单有 onsubmit 返回 false，则隐藏加载层
-                    setTimeout(() => {
-                        if (form.onsubmit && form.onsubmit() === false) {
-                            hideLoading();
-                        }
-                    }, 100);
+                    return;
                 }
+
+                // 非表单按钮才显示加载层
+                showLoading();
             }
         }, true);
 
