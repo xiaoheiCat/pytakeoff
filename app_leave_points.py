@@ -94,6 +94,35 @@ def register_leave_points_routes(app, admin_required, password_change_required):
             'attachments': [dict(att) for att in attachments]
         })
 
+    @app.route('/admin/leave/attachment/<int:attachment_id>')
+    @login_required
+    @admin_required
+    def download_leave_attachment(attachment_id):
+        """Download leave request attachment"""
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM leave_attachments
+            WHERE id = ?
+        ''', (attachment_id,))
+        attachment = cursor.fetchone()
+        conn.close()
+
+        if not attachment:
+            flash('附件不存在', 'error')
+            return redirect(url_for('admin_leave'))
+
+        import os
+        if not os.path.exists(attachment['filepath']):
+            flash('附件文件不存在', 'error')
+            return redirect(url_for('admin_leave'))
+
+        return send_file(
+            attachment['filepath'],
+            as_attachment=True,
+            download_name=attachment['filename']
+        )
+
     @app.route('/admin/leave/<int:leave_id>/approve', methods=['POST'])
     @login_required
     @admin_required

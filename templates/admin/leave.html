@@ -8,7 +8,7 @@
     {% if leave_requests %}
     <table>
         <thead>
-            <tr><th>姓名</th><th>学工号</th><th>类型</th><th>原因</th><th>状态</th><th>申请时间</th><th>审批人</th><th>操作</th></tr>
+            <tr><th>姓名</th><th>学工号</th><th>类型</th><th>原因</th><th>附件</th><th>状态</th><th>申请时间</th><th>审批人</th><th>操作</th></tr>
         </thead>
         <tbody>
             {% for req in leave_requests %}
@@ -25,6 +25,9 @@
                     {% endif %}
                 </td>
                 <td>{{ req.reason }}</td>
+                <td>
+                    <button onclick="viewAttachments({{ req.id }})" class="btn" style="padding: 4px 8px; font-size: 12px;">查看附件</button>
+                </td>
                 <td>
                     {% if req.status == 'pending' %}
                     <span style="color: #f39c12; font-weight: bold;">⏳ 待审批</span>
@@ -58,4 +61,59 @@
     <p style="text-align: center; color: #95a5a6; padding: 20px;">暂无请假申请</p>
     {% endif %}
 </div>
+
+<!-- 附件查看模态框 -->
+<div id="attachmentModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="position: relative; background: white; margin: 50px auto; padding: 20px; max-width: 600px; border-radius: 8px; max-height: 80vh; overflow-y: auto;">
+        <h3>请假附件</h3>
+        <button onclick="closeAttachments()" style="position: absolute; top: 10px; right: 10px; background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">关闭</button>
+        <div id="attachmentList" style="margin-top: 20px;">
+            <p style="text-align: center; color: #95a5a6;">加载中...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+async function viewAttachments(leaveId) {
+    const modal = document.getElementById('attachmentModal');
+    const list = document.getElementById('attachmentList');
+
+    modal.style.display = 'block';
+    list.innerHTML = '<p style="text-align: center; color: #95a5a6;">加载中...</p>';
+
+    try {
+        const response = await fetch(`/admin/leave/${leaveId}/attachments`);
+        const data = await response.json();
+
+        if (data.success && data.attachments.length > 0) {
+            let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+            data.attachments.forEach(att => {
+                html += `
+                    <div style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <p style="margin: 0 0 5px 0;"><strong>文件名:</strong> ${att.filename}</p>
+                        <a href="/admin/leave/attachment/${att.id}" target="_blank" class="btn btn-primary" style="padding: 5px 10px; font-size: 12px; display: inline-block; text-decoration: none;">下载/查看</a>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            list.innerHTML = html;
+        } else {
+            list.innerHTML = '<p style="text-align: center; color: #95a5a6;">无附件</p>';
+        }
+    } catch (error) {
+        list.innerHTML = '<p style="text-align: center; color: #e74c3c;">加载失败</p>';
+    }
+}
+
+function closeAttachments() {
+    document.getElementById('attachmentModal').style.display = 'none';
+}
+
+// 点击模态框外部关闭
+document.getElementById('attachmentModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeAttachments();
+    }
+});
+</script>
 {% endblock %}
