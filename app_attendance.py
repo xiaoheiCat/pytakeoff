@@ -478,23 +478,13 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # Mark session as inactive
         cursor.execute('UPDATE attendance_sessions SET is_active = 0 WHERE id = ?', (session_id,))
 
-        # 获取所有已批准待使用的请假（根据会话类型查找）
-        if session_type == 'checkin':
-            # 签到会话：查找 session_id 或 paired_session_id 匹配的请假
-            cursor.execute('''
-                SELECT id, user_id, leave_type
-                FROM leave_requests
-                WHERE status = 'approved' AND (session_id = ? OR paired_session_id = ?)
-                ORDER BY approved_at
-            ''', (session_id, session_id))
-        else:
-            # 签退会话：查找 paired_session_id 匹配配对签到的请假
-            cursor.execute('''
-                SELECT id, user_id, leave_type
-                FROM leave_requests
-                WHERE status = 'approved' AND (session_id = ? OR paired_session_id = ?)
-                ORDER BY approved_at
-            ''', (paired_session_id, paired_session_id))
+        # 获取所有已批准待使用的请假（查找还未关联到签到活动的请假）
+        cursor.execute('''
+            SELECT id, user_id, leave_type
+            FROM leave_requests
+            WHERE status = 'approved' AND session_id IS NULL
+            ORDER BY approved_at
+        ''')
 
         approved_leaves = cursor.fetchall()
 

@@ -19,7 +19,7 @@
             <span style="color: #95a5a6;">已结束</span>
             {% endif %}
         </p>
-        <p><strong>已签到/缺勤人数：</strong>{{ records|length }} / {{ records|length + not_checked_in|length }}</p>
+        <p><strong>已确定人数/未确定人数：</strong>{{ records|length }} / {{ not_checked_in|length }}</p>
     </div>
 
     <h3>已签到记录</h3>
