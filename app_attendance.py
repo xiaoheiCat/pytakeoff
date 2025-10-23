@@ -165,17 +165,12 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         return redirect(url_for('admin_attendance'))
 
     @app.route('/qr')
-    @login_required
-    @admin_required
-    @password_change_required
     def qr_screen():
         """QR code display screen"""
         system_title = get_setting('system_title', '签到系统')
         return render_template('qr_screen.html', system_title=system_title)
 
     @app.route('/api/qr/start', methods=['POST'])
-    @login_required
-    @admin_required
     def start_qr_display():
         """Start QR code display"""
         data = request.get_json()
@@ -203,7 +198,13 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
             return jsonify({'success': False, 'message': '该签到活动已结束'})
 
         # Check if session has expired
-        end_time = datetime.strptime(session['end_time'], '%Y-%m-%d %H:%M:%S')
+        end_time_str = session['end_time']
+        # Handle both formats: with and without microseconds
+        try:
+            end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S.%f')
+        except ValueError:
+            end_time = datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S')
+
         if datetime.now() > end_time:
             conn.close()
             return jsonify({'success': False, 'message': '该签到活动已过期'})
@@ -217,8 +218,6 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         })
 
     @app.route('/api/qr/generate/<int:session_id>')
-    @login_required
-    @admin_required
     def generate_qr_api(session_id):
         """Generate new QR code for session"""
         conn = get_db()
@@ -260,8 +259,6 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         })
 
     @app.route('/api/qr/status/<int:session_id>')
-    @login_required
-    @admin_required
     def qr_status_api(session_id):
         """Get attendance status for QR display"""
         conn = get_db()
