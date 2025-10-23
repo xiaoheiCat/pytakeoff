@@ -201,7 +201,7 @@ async function refreshQRCode() {
             startCountdown();
         }
     } catch (error) {
-        console.error('QR refresh error:', error);
+        console.error('二维码刷新错误:', error);
     }
 }
 
@@ -239,7 +239,7 @@ async function updateStatus() {
             updateNameList('not-checked-in-list', data.not_checked_in);
         }
     } catch (error) {
-        console.error('Status refresh error:', error);
+        console.error('状态刷新错误:', error);
     }
 }
 
