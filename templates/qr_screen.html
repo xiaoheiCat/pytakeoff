@@ -167,6 +167,7 @@ let sessionId = null;
 let refreshInterval = 15;
 let countdownTimer = null;
 let statusTimer = null;
+let qrRefreshTimer = null;
 let currentTab = 'checked-in';
 
 async function startQRDisplay() {
@@ -240,7 +241,7 @@ function startCountdown() {
 
 function startQRRefresh() {
     refreshQRCode();
-    setInterval(refreshQRCode, refreshInterval * 1000);
+    qrRefreshTimer = setInterval(refreshQRCode, refreshInterval * 1000);
 }
 
 async function updateStatus() {
@@ -251,6 +252,21 @@ async function updateStatus() {
         const data = await response.json();
 
         if (data.success) {
+            // Check if session is still active
+            if (!data.is_active) {
+                // Session ended, show message and hide QR code
+                document.getElementById('qr-code').innerHTML =
+                    '<div style="text-align: center; padding: 50px; color: #e74c3c; font-size: 24px; font-weight: bold;">活动已结束</div>';
+
+                // Stop all timers
+                if (countdownTimer) clearInterval(countdownTimer);
+                if (qrRefreshTimer) clearInterval(qrRefreshTimer);
+                if (statusTimer) clearInterval(statusTimer);
+
+                // Update countdown to show ended status
+                document.getElementById('countdown').textContent = '--';
+            }
+
             document.getElementById('checked-in-count').textContent = data.checked_in_count;
             document.getElementById('not-checked-in-count').textContent = data.not_checked_in_count;
 

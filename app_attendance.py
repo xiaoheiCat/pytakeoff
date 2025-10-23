@@ -607,6 +607,20 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         conn = get_db()
         cursor = conn.cursor()
 
+        # Get session status
+        cursor.execute('''
+            SELECT is_active
+            FROM attendance_sessions
+            WHERE id = ?
+        ''', (session_id,))
+        session = cursor.fetchone()
+
+        if not session:
+            conn.close()
+            return jsonify({'success': False, 'message': '签到活动不存在'})
+
+        is_active = session['is_active']
+
         # Get checked-in users
         cursor.execute('''
             SELECT u.id, u.name, u.student_id, ar.checked_in_at
@@ -637,6 +651,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
 
         return jsonify({
             'success': True,
+            'is_active': is_active,
             'checked_in': checked_in,
             'not_checked_in': not_checked_in,
             'checked_in_count': len(checked_in),
