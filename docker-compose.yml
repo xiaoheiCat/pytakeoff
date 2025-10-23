@@ -3,6 +3,7 @@ version: '3.8'
 services:
   web:
     build: .
+    image: ghcr.io/xiaoheicat/pytakeoff:latest
     ports:
       - "5000:5000"
     volumes:
