@@ -284,10 +284,31 @@
                 (target.tagName === 'INPUT' && target.type === 'submit') ||
                 (target.tagName === 'A' && target.classList.contains('btn'))) {
 
-                // 排除特定不需要加载的按钮（如取消按钮、返回按钮等）
+                // 排除特定不需要加载的按钮
                 if (target.classList.contains('no-loading') ||
                     target.type === 'button' ||
                     target.onclick?.toString().includes('return false')) {
+                    return;
+                }
+
+                // 排除下载和导出链接（通过 href 或文本内容判断）
+                if (target.tagName === 'A') {
+                    const href = target.getAttribute('href') || '';
+                    const text = target.textContent || '';
+
+                    // 排除下载、导出、返回等操作
+                    if (href.includes('download') ||
+                        href.includes('export') ||
+                        text.includes('下载') ||
+                        text.includes('导出') ||
+                        text.includes('返回') ||
+                        text.includes('查看')) {
+                        return;
+                    }
+                }
+
+                // 排除有 onclick 属性的按钮（通常是模态框、下拉等）
+                if (target.tagName === 'BUTTON' && target.onclick) {
                     return;
                 }
 
