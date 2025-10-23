@@ -2,12 +2,10 @@ name: Docker 镜像发布
 
 # 触发条件
 on:
-  # 当推送标签时触发
+  # 当推送标签或分支时触发
   push:
     tags:
       - 'v*.*.*'
-  # 当推送到 main/master 分支时触发
-  push:
     branches:
       - main
       - master
