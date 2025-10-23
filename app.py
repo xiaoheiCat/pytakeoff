@@ -192,7 +192,7 @@ def checkin(qr_token):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT qr.*, ats.activity_code, ats.end_time
+        SELECT qr.*, ats.activity_code
         FROM qr_codes qr
         JOIN attendance_sessions ats ON qr.session_id = ats.id
         WHERE qr.qr_token = ? AND qr.is_used = 0 AND qr.expires_at > CURRENT_TIMESTAMP
