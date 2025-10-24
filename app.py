@@ -163,6 +163,10 @@ def change_password():
             flash('新密码长度至少6位', 'error')
         elif new_password != confirm_password:
             flash('两次输入的新密码不一致', 'error')
+        elif current_password == new_password:
+            flash('新密码不能与旧密码相同', 'error')
+        elif new_password == current_user.student_id:
+            flash('密码不能和账号相同', 'error')
         else:
             current_user.set_password(new_password)
 
