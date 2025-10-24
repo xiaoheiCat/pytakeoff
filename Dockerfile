@@ -2,10 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including timezone data
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# Set timezone environment variable
+ENV TZ=Asia/Shanghai
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
