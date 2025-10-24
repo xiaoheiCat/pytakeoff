@@ -243,6 +243,7 @@ UI 使用中文（zh-CN）。修改面向用户的文本时：
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD`: 初始管理员凭据
 - `SYSTEM_TITLE`: 显示名称
 - `QR_REFRESH_INTERVAL`: 二维码刷新秒数
+- `TZ`: 时区设置（默认 `Asia/Shanghai`）
 
 ### 数据持久化
 Docker 卷挂载：

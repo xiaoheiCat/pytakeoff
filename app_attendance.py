@@ -43,7 +43,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         cursor = conn.cursor()
         cursor.execute('''
             SELECT ats.*, u.name as created_by_name,
-                   COUNT(DISTINCT ar.id) as checked_in_count,
+                   COUNT(DISTINCT CASE WHEN ar.status = 'present' THEN ar.id END) as checked_in_count,
                    (SELECT COUNT(*) FROM users WHERE is_admin = 0) as total_users
             FROM attendance_sessions ats
             LEFT JOIN users u ON ats.created_by = u.id
@@ -780,12 +780,12 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
 
         is_active = session['is_active']
 
-        # Get checked-in users
+        # Get checked-in users (only status='present')
         cursor.execute('''
             SELECT u.id, u.name, u.student_id, ar.checked_in_at
             FROM attendance_records ar
             JOIN users u ON ar.user_id = u.id
-            WHERE ar.session_id = ?
+            WHERE ar.session_id = ? AND ar.status = 'present'
             ORDER BY ar.checked_in_at DESC
         ''', (session_id,))
         checked_in = [dict(row) for row in cursor.fetchall()]

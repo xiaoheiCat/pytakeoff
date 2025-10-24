@@ -12,6 +12,10 @@ import qrcode
 from io import BytesIO
 import base64
 
+# Set timezone from environment variable
+timezone = os.getenv('TZ', 'Asia/Shanghai')
+os.environ['TZ'] = timezone
+
 from database import init_db, get_db, get_setting, set_setting
 from models import User
 
