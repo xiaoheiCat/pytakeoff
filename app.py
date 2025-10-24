@@ -232,19 +232,50 @@ def checkin(qr_token):
     # Mark QR code as used
     cursor.execute('UPDATE qr_codes SET is_used = 1 WHERE id = ?', (qr_code_row['id'],))
 
+    # Get session info to check if it has paired checkout
+    cursor.execute('''
+        SELECT session_type, paired_session_id,
+               (SELECT id FROM attendance_sessions WHERE paired_session_id = ats.id) as checkout_session_id
+        FROM attendance_sessions ats
+        WHERE id = ?
+    ''', (session_id,))
+    session_info = cursor.fetchone()
+
+    session_type = session_info['session_type'] if session_info else 'checkin'
+    has_checkout = session_info and (session_info['checkout_session_id'] is not None)
+
     # Record attendance
     cursor.execute('''
         INSERT INTO attendance_records (session_id, user_id, status)
         VALUES (?, ?, 'present')
     ''', (session_id, current_user.id))
 
-    # Add points for successful check-in
-    checkin_points = float(get_setting('checkin_points', '1'))
-    if checkin_points != 0:
-        cursor.execute('''
-            INSERT INTO points_records (user_id, points, reason, record_type, session_id)
-            VALUES (?, ?, '签到成功', 'checkin', ?)
-        ''', (current_user.id, checkin_points, session_id))
+    # 加分逻辑：只有在配对活动中签到和签退都完成才加分
+    should_add_points = False
+
+    if session_type == 'checkout':
+        # 这是签退会话 - 检查用户是否完成了配对的签到
+        paired_checkin_id = session_info['paired_session_id']
+        if paired_checkin_id:
+            cursor.execute('''
+                SELECT id FROM attendance_records
+                WHERE session_id = ? AND user_id = ? AND status = 'present'
+            ''', (paired_checkin_id, current_user.id))
+            if cursor.fetchone():
+                # 用户签到和签退都完成了，加分
+                should_add_points = True
+    elif not has_checkout:
+        # 独立签到活动（无配对签退），立即加分
+        should_add_points = True
+    # 如果是有配对签退的签到活动，不加分（等签退完成后再加）
+
+    if should_add_points:
+        checkin_points = float(get_setting('checkin_points', '1'))
+        if checkin_points != 0:
+            cursor.execute('''
+                INSERT INTO points_records (user_id, points, reason, record_type, session_id)
+                VALUES (?, ?, '签到成功', 'checkin', ?)
+            ''', (current_user.id, checkin_points, session_id))
 
     conn.commit()
     conn.close()

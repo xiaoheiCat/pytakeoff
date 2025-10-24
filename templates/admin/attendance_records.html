@@ -8,7 +8,7 @@
     </div>
 
     <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
-        <h3>签到活动信息</h3>
+        <h3>{{ '签退' if session.session_type == 'checkout' else '签到' }}活动信息</h3>
         <p><strong>活动码：</strong>{{ session.activity_code }}</p>
         <p><strong>开始时间：</strong>{{ session.start_time }}</p>
         <p><strong>结束时间：</strong>{{ session.end_time }}</p>
@@ -19,17 +19,17 @@
             <span style="color: #95a5a6;">已结束</span>
             {% endif %}
         </p>
-        <p><strong>已到/未签：</strong>{{ records|selectattr('status', 'equalto', 'present')|list|length }} / {{ (records|rejectattr('status', 'equalto', 'present')|list|length) + (not_checked_in|length) }}</p>
+        <p><strong>已{{ '签退' if session.session_type == 'checkout' else '签到' }}/未{{ '签退' if session.session_type == 'checkout' else '签到' }}：</strong>{{ records|selectattr('status', 'equalto', 'present')|list|length }} / {{ (records|rejectattr('status', 'equalto', 'present')|list|length) + (not_checked_in|length) }}</p>
     </div>
 
-    <h3>已签到记录</h3>
+    <h3>已{{ '签退' if session.session_type == 'checkout' else '签到' }}记录</h3>
     {% if records %}
     <table>
         <thead>
             <tr>
                 <th>学号</th>
                 <th>姓名</th>
-                <th>签到时间</th>
+                <th>{{ '签退' if session.session_type == 'checkout' else '签到' }}时间</th>
                 <th>状态</th>
                 <th>操作</th>
             </tr>
@@ -42,7 +42,7 @@
                 <td>{{ record.checked_in_at }}</td>
                 <td>
                     {% if record.status == 'present' %}
-                    <span style="color: #27ae60;">✓ 已签到</span>
+                    <span style="color: #27ae60;">✓ 已{{ '签退' if session.session_type == 'checkout' else '签到' }}</span>
                     {% elif record.status == 'absent' %}
                     <span style="color: #e74c3c;">✗ 缺勤</span>
                     {% elif record.status == 'public_leave' %}
@@ -59,7 +59,7 @@
                     <form method="POST" action="{{ url_for('update_attendance_status', record_id=record.id) }}" style="display: inline;">
                         <select name="status" class="form-control" style="display: inline-block; width: auto; padding: 4px 8px; font-size: 12px;" onchange="this.form.submit()">
                             <option value="">修改状态...</option>
-                            <option value="present">已签到</option>
+                            <option value="present">已{{ '签退' if session.session_type == 'checkout' else '签到' }}</option>
                             <option value="absent">缺勤</option>
                             <option value="public_leave">公假</option>
                             <option value="personal_leave">事假</option>
@@ -76,7 +76,7 @@
     {% endif %}
 
     {% if not_checked_in %}
-    <h3 style="margin-top: 30px;">未签到用户</h3>
+    <h3 style="margin-top: 30px;">未{{ '签退' if session.session_type == 'checkout' else '签到' }}用户</h3>
     <table>
         <thead>
             <tr>
@@ -95,7 +95,7 @@
                         <input type="hidden" name="user_id" value="{{ user.id }}">
                         <select name="status" class="form-control" style="display: inline-block; width: auto; padding: 4px 8px; font-size: 12px;" required>
                             <option value="">选择状态...</option>
-                            <option value="present">已签到</option>
+                            <option value="present">已{{ '签退' if session.session_type == 'checkout' else '签到' }}</option>
                             <option value="absent">缺勤</option>
                             <option value="public_leave">公假</option>
                             <option value="personal_leave">事假</option>
