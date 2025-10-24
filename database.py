@@ -1,6 +1,5 @@
 import sqlite3
 import os
-from datetime import datetime
 from werkzeug.security import generate_password_hash
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'data', 'database.db')
@@ -10,6 +9,10 @@ def get_db():
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+
+    # Configure SQLite to use localtime for datetime functions
+    conn.execute("PRAGMA localtime = 1")
+
     return conn
 
 def init_db():

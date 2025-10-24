@@ -2,13 +2,14 @@
 
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
+from datetime import timedelta
 import qrcode
 from io import BytesIO
 import base64
 
 from database import get_db, get_setting
 from models import User
+from timezone_utils import now as tz_now
 
 def generate_qr_code_image(data):
     """Generate QR code image as base64"""
@@ -740,7 +741,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # Generate QR token
         qr_token = generate_qr_token()
         qr_refresh_interval = int(get_setting('qr_refresh_interval', '15'))
-        expires_at = datetime.now() + timedelta(seconds=qr_refresh_interval + 5)
+        expires_at = tz_now() + timedelta(seconds=qr_refresh_interval + 5)
 
         # Save QR code
         cursor.execute('''

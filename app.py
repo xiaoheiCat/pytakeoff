@@ -3,7 +3,7 @@ import secrets
 import string
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session as flask_session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -12,12 +12,9 @@ import qrcode
 from io import BytesIO
 import base64
 
-# Set timezone from environment variable
-timezone = os.getenv('TZ', 'Asia/Shanghai')
-os.environ['TZ'] = timezone
-
 from database import init_db, get_db, get_setting, set_setting
 from models import User
+from timezone_utils import now as tz_now, format_datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'change-this-to-a-random-secret-key')
@@ -35,6 +32,12 @@ init_db()
 
 # Create upload directory
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Register timezone template filter
+@app.template_filter('format_datetime')
+def format_datetime_filter(dt, format_str='%Y-%m-%d %H:%M:%S'):
+    """Format datetime to local timezone in templates"""
+    return format_datetime(dt, format_str)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -294,7 +297,7 @@ def request_leave():
         for file in files:
             if file and file.filename:
                 filename = secure_filename(file.filename)
-                timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                timestamp = tz_now().strftime('%Y%m%d%H%M%S')
                 unique_filename = f"{timestamp}_{filename}"
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
                 file.save(filepath)

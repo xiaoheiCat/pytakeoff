@@ -2,12 +2,12 @@
 
 from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_login import login_required, current_user
-from datetime import datetime
 import csv
 import io
 
 from database import get_db, get_setting, set_setting
 from models import User
+from timezone_utils import now as tz_now
 
 def register_leave_points_routes(app, admin_required, password_change_required):
     """Register leave and points management routes"""
@@ -425,7 +425,7 @@ def register_leave_points_routes(app, admin_required, password_change_required):
             io.BytesIO(output.getvalue().encode('utf-8-sig')),
             mimetype='text/csv',
             as_attachment=True,
-            download_name=f'积分统计_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+            download_name=f'积分统计_{tz_now().strftime("%Y%m%d_%H%M%S")}.csv'
         )
 
     @app.route('/admin/settings', methods=['GET', 'POST'])
