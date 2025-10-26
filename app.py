@@ -199,14 +199,14 @@ def checkin(qr_token):
         flash('请先修改密码', 'warning')
         return redirect(url_for('change_password'))
 
-    # Verify QR token
+    # Verify QR token - 仅验证时效性和会话状态，不检查 is_used
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT qr.*, ats.activity_code
         FROM qr_codes qr
         JOIN attendance_sessions ats ON qr.session_id = ats.id
-        WHERE qr.qr_token = ? AND qr.is_used = 0 AND qr.expires_at > CURRENT_TIMESTAMP
+        WHERE qr.qr_token = ? AND qr.expires_at > CURRENT_TIMESTAMP
         AND ats.is_active = 1
     ''', (qr_token,))
     qr_code_row = cursor.fetchone()
@@ -215,7 +215,7 @@ def checkin(qr_token):
         conn.close()
         return render_template('checkin_result.html',
                              success=False,
-                             message='二维码已过期或无效，请重新扫描',
+                             message='二维码已过期或签到活动已结束',
                              system_title=get_setting('system_title', '签到系统'))
 
     session_id = qr_code_row['session_id']
@@ -230,11 +230,8 @@ def checkin(qr_token):
         conn.close()
         return render_template('checkin_result.html',
                              success=True,
-                             message='您已经签到过了',
+                             message='您已完成签到，无需重复操作',
                              system_title=get_setting('system_title', '签到系统'))
-
-    # Mark QR code as used
-    cursor.execute('UPDATE qr_codes SET is_used = 1 WHERE id = ?', (qr_code_row['id'],))
 
     # Get session info to check if it has paired checkout
     cursor.execute('''
