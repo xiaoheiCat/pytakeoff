@@ -492,6 +492,34 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # 创建一个字典存储已批准请假的用户
         leave_dict = {leave['user_id']: leave for leave in approved_leaves}
 
+        # 如果是签退会话，还要检查配对签到会话中的请假记录
+        checkin_leave_dict = {}
+        if session_type == 'checkout' and paired_session_id:
+            # 获取配对签到活动中有请假状态的用户
+            cursor.execute('''
+                SELECT ar.user_id, ar.status
+                FROM attendance_records ar
+                WHERE ar.session_id = ?
+                AND ar.status IN ('public_leave', 'personal_leave', 'sick_leave')
+            ''', (paired_session_id,))
+
+            checkin_leave_records = cursor.fetchall()
+
+            # 将签到中的请假状态映射到请假类型
+            status_to_leave_type = {
+                'public_leave': 'public',
+                'personal_leave': 'personal',
+                'sick_leave': 'sick'
+            }
+
+            # 构建签到请假字典（用户ID -> 请假类型）
+            for record in checkin_leave_records:
+                user_id = record['user_id']
+                status = record['status']
+                leave_type = status_to_leave_type.get(status)
+                if leave_type:
+                    checkin_leave_dict[user_id] = leave_type
+
         # 积分和请假类型映射
         points_map = {
             'public': float(get_setting('public_leave_points', '0')),
@@ -522,44 +550,95 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         for user in not_completed_users:
             user_id = user['id']
 
-            # 检查该用户是否有已批准的请假
+            # 首先检查该用户是否有已批准的请假或从签到继承的请假
+            leave_type = None
+            leave_id = None
+
             if user_id in leave_dict:
+                # 有新批准的请假
                 leave = leave_dict[user_id]
                 leave_type = leave['leave_type']
+                leave_id = leave['id']
+            elif session_type == 'checkout' and user_id in checkin_leave_dict:
+                # 签退活动中，该用户在签到活动中有请假
+                leave_type = checkin_leave_dict[user_id]
 
-                # 标记请假为已使用
-                if session_type == 'checkin' and paired_session_id:
-                    # 签到会话且有配对签退，更新 session_id 和 paired_session_id
-                    cursor.execute('''
-                        UPDATE leave_requests
-                        SET status = 'used', session_id = ?, paired_session_id = ?, used_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    ''', (session_id, paired_session_id, leave['id']))
-                else:
-                    # 其他情况只更新 session_id
-                    cursor.execute('''
-                        UPDATE leave_requests
-                        SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
-                        WHERE id = ?
-                    ''', (session_id, leave['id']))
+            if leave_type:
+                # 用户有请假，创建请假状态的记录
+                leave_status_map = {
+                    'public': 'public_leave',
+                    'personal': 'personal_leave',
+                    'sick': 'sick_leave'
+                }
+                leave_status = leave_status_map.get(leave_type, 'public_leave')
 
-                # 添加积分记录（只在第一次请假时扣分）
-                points = points_map.get(leave_type, 0)
-                if points != 0:
-                    # 检查是否已经为这个请假扣过分
-                    cursor.execute('''
-                        SELECT id FROM points_records
-                        WHERE leave_request_id = ? AND is_deleted = 0
-                    ''', (leave['id'],))
-                    existing_points = cursor.fetchone()
+                # 创建带有请假状态的签到记录
+                cursor.execute('''
+                    INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (session_id, user_id, leave_status))
 
-                    if not existing_points:
+                # 如果有实际的请假申请记录（不是从签到继承的）
+                if leave_id:
+                    # 标记请假为已使用
+                    if session_type == 'checkin':
+                        # 签到会话，查找是否有配对的签退
                         cursor.execute('''
-                            INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
-                            VALUES (?, ?, ?, 'leave', ?, ?, ?)
-                        ''', (user_id, points, f'{leave_type_names[leave_type]}', session_id, leave['id'], current_user.id))
+                            SELECT id FROM attendance_sessions
+                            WHERE paired_session_id = ?
+                        ''', (session_id,))
+                        checkout_session = cursor.fetchone()
+                        checkout_session_id = checkout_session['id'] if checkout_session else None
 
-                used_leave_count += 1
+                        if checkout_session_id:
+                            # 有配对签退，更新 session_id 和 paired_session_id
+                            cursor.execute('''
+                                UPDATE leave_requests
+                                SET status = 'used', session_id = ?, paired_session_id = ?, used_at = CURRENT_TIMESTAMP
+                                WHERE id = ?
+                            ''', (session_id, checkout_session_id, leave_id))
+                        else:
+                            # 没有配对签退，只更新 session_id
+                            cursor.execute('''
+                                UPDATE leave_requests
+                                SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                                WHERE id = ?
+                            ''', (session_id, leave_id))
+                    elif session_type == 'checkout' and paired_session_id:
+                        # 签退会话，更新为关联到签退
+                        cursor.execute('''
+                            UPDATE leave_requests
+                            SET paired_session_id = ?, used_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        ''', (session_id, leave_id))
+                    else:
+                        # 其他情况只更新 session_id
+                        cursor.execute('''
+                            UPDATE leave_requests
+                            SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                            WHERE id = ?
+                        ''', (session_id, leave_id))
+
+                    # 添加积分记录（只在第一次请假时扣分）
+                    points = points_map.get(leave_type, 0)
+                    if points != 0:
+                        # 检查是否已经为这个请假扣过分
+                        cursor.execute('''
+                            SELECT id FROM points_records
+                            WHERE leave_request_id = ? AND is_deleted = 0
+                        ''', (leave_id,))
+                        existing_points = cursor.fetchone()
+
+                        if not existing_points:
+                            cursor.execute('''
+                                INSERT INTO points_records (user_id, points, reason, record_type, session_id, leave_request_id, created_by)
+                                VALUES (?, ?, ?, 'leave', ?, ?, ?)
+                            ''', (user_id, points, f'{leave_type_names[leave_type]}', session_id, leave_id, current_user.id))
+
+                    used_leave_count += 1
+                else:
+                    # 从签到继承的请假，不添加积分记录（已经在签到时添加过了）
+                    used_leave_count += 1
             else:
                 # 无请假，标记为缺勤
                 cursor.execute('''
