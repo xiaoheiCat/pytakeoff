@@ -35,11 +35,11 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          anthropic_base_url: "https://open.bigmodel.cn/api/anthropic"
           settings: |
             {
               "env": {
                 "ANTHROPIC_AUTH_TOKEN": "${{ secrets.ANTHROPIC_AUTH_TOKEN }}",
-                "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
                 "ANTHROPIC_DEFAULT_HAIKU_MODEL": "GLM-4.5-Air",
                 "ANTHROPIC_DEFAULT_OPUS_MODEL": "GLM-4.6",
                 "ANTHROPIC_DEFAULT_SONNET_MODEL": "GLM-4.6",
