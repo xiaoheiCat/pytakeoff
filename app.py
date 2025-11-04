@@ -7,6 +7,10 @@ from datetime import timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session as flask_session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from wtforms import StringField, PasswordField, SelectField, TextAreaField, FileField, BooleanField, FloatField, HiddenField
+from wtforms.validators import DataRequired, Length, Regexp, NumberRange, Optional
+from flask_wtf.file import FileRequired, FileAllowed
 from werkzeug.utils import secure_filename
 import qrcode
 from io import BytesIO
@@ -15,10 +19,17 @@ import base64
 from database import init_db, get_db, get_setting, set_setting
 from models import User
 from timezone_utils import now as tz_now, format_datetime
+from security import validate_password_strength, validate_student_id, sanitize_input, secure_headers
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'change-this-to-a-random-secret-key')
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
+# Generate a secure random secret key if not provided
+secret_key = os.getenv('FLASK_SECRET_KEY')
+if not secret_key or secret_key == 'change-this-to-a-random-secret-key':
+    import secrets
+    secret_key = secrets.token_hex(32)
+    print(f"WARNING: Using auto-generated secret key. Set FLASK_SECRET_KEY environment variable for production: {secret_key}")
+app.config['SECRET_KEY'] = secret_key
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)  # Reduced from 365 days to 8 hours
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
@@ -26,6 +37,9 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
 
 # Initialize database
 init_db()
@@ -38,6 +52,14 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 def format_datetime_filter(dt, format_str='%Y-%m-%d %H:%M:%S'):
     """Format datetime to local timezone in templates"""
     return format_datetime(dt, format_str)
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    security = secure_headers()
+    for header, value in security.items():
+        response.headers[header] = value
+    return response
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -159,8 +181,6 @@ def change_password():
 
         if not current_user.check_password(current_password):
             flash('当前密码错误', 'error')
-        elif len(new_password) < 6:
-            flash('新密码长度至少6位', 'error')
         elif new_password != confirm_password:
             flash('两次输入的新密码不一致', 'error')
         elif current_password == new_password:
@@ -168,6 +188,12 @@ def change_password():
         elif new_password == current_user.student_id:
             flash('密码不能和账号相同', 'error')
         else:
+            # Enhanced password strength validation
+            is_strong, errors = validate_password_strength(new_password)
+            if not is_strong:
+                for error in errors:
+                    flash(error, 'error')
+                return render_template('change_password.html', system_title=system_title)
             current_user.set_password(new_password)
 
             # Check if user was trying to check in via QR code
@@ -199,14 +225,14 @@ def checkin(qr_token):
         flash('请先修改密码', 'warning')
         return redirect(url_for('change_password'))
 
-    # Verify QR token - 仅验证时效性和会话状态，不检查 is_used
+    # Verify QR token - check时效性、会话状态和一次性使用
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT qr.*, ats.activity_code
         FROM qr_codes qr
         JOIN attendance_sessions ats ON qr.session_id = ats.id
-        WHERE qr.qr_token = ? AND qr.expires_at > ?
+        WHERE qr.qr_token = ? AND qr.expires_at > ? AND qr.is_used = 0
         AND ats.is_active = 1
     ''', (qr_token, tz_now()))
     qr_code_row = cursor.fetchone()
@@ -244,6 +270,11 @@ def checkin(qr_token):
 
     session_type = session_info['session_type'] if session_info else 'checkin'
     has_checkout = session_info and (session_info['checkout_session_id'] is not None)
+
+    # Mark QR token as used
+    cursor.execute('''
+        UPDATE qr_codes SET is_used = 1 WHERE id = ?
+    ''', (qr_code_row['id'],))
 
     # Record attendance
     cursor.execute('''
@@ -324,11 +355,41 @@ def request_leave():
         ''', (current_user.id, leave_type, reason))
         leave_request_id = cursor.lastrowid
 
-        # Handle file uploads
+        # Handle file uploads with enhanced security
+        allowed_extensions = {'.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif'}
+        allowed_mimetypes = {'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/gif'}
+
         files = request.files.getlist('attachments')
         for file in files:
             if file and file.filename:
                 filename = secure_filename(file.filename)
+
+                # Validate file extension
+                file_ext = os.path.splitext(filename)[1].lower()
+                if file_ext not in allowed_extensions:
+                    flash(f'不支持的文件类型: {filename}', 'error')
+                    continue
+
+                # Validate MIME type
+                if file.mimetype not in allowed_mimetypes:
+                    flash(f'文件类型验证失败: {filename}', 'error')
+                    continue
+
+                # Validate file content (additional security check)
+                file_content = file.read()
+                file.seek(0)  # Reset file pointer
+
+                # Basic content validation for images
+                if file.mimetype.startswith('image/'):
+                    try:
+                        from PIL import Image
+                        img = Image.open(io.BytesIO(file_content))
+                        img.verify()  # Verify it's a valid image
+                        file.seek(0)  # Reset file pointer again
+                    except Exception:
+                        flash(f'图片文件损坏或格式不正确: {filename}', 'error')
+                        continue
+
                 timestamp = tz_now().strftime('%Y%m%d%H%M%S')
                 unique_filename = f"{timestamp}_{filename}"
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
