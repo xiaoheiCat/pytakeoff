@@ -206,9 +206,9 @@ def checkin(qr_token):
         SELECT qr.*, ats.activity_code
         FROM qr_codes qr
         JOIN attendance_sessions ats ON qr.session_id = ats.id
-        WHERE qr.qr_token = ? AND qr.expires_at > CURRENT_TIMESTAMP
+        WHERE qr.qr_token = ? AND qr.expires_at > ?
         AND ats.is_active = 1
-    ''', (qr_token,))
+    ''', (qr_token, tz_now()))
     qr_code_row = cursor.fetchone()
 
     if not qr_code_row:

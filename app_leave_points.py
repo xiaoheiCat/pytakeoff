@@ -151,9 +151,9 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         new_status = 'approved' if action == 'approve' else 'rejected'
         cursor.execute('''
             UPDATE leave_requests
-            SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP
+            SET status = ?, approved_by = ?, approved_at = ?
             WHERE id = ?
-        ''', (new_status, current_user.id, leave_id))
+        ''', (new_status, current_user.id, tz_now(), leave_id))
 
         # 注意：批准时不再关联session_id和添加积分，而是在结束活动时才处理
 

@@ -296,8 +296,8 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         # Insert attendance record
         cursor.execute('''
             INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (session_id, user_id, status))
+            VALUES (?, ?, ?, ?)
+        ''', (session_id, user_id, status, tz_now()))
 
         # Add points record based on status
         points = 0
@@ -575,8 +575,8 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
                 # 创建带有请假状态的签到记录
                 cursor.execute('''
                     INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (session_id, user_id, leave_status))
+                    VALUES (?, ?, ?, ?)
+                ''', (session_id, user_id, leave_status, tz_now()))
 
                 # 如果有实际的请假申请记录（不是从签到继承的）
                 if leave_id:
@@ -594,30 +594,30 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
                             # 有配对签退，更新 session_id 和 paired_session_id
                             cursor.execute('''
                                 UPDATE leave_requests
-                                SET status = 'used', session_id = ?, paired_session_id = ?, used_at = CURRENT_TIMESTAMP
+                                SET status = 'used', session_id = ?, paired_session_id = ?, used_at = ?
                                 WHERE id = ?
-                            ''', (session_id, checkout_session_id, leave_id))
+                            ''', (session_id, checkout_session_id, tz_now(), leave_id))
                         else:
                             # 没有配对签退，只更新 session_id
                             cursor.execute('''
                                 UPDATE leave_requests
-                                SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                                SET status = 'used', session_id = ?, used_at = ?
                                 WHERE id = ?
-                            ''', (session_id, leave_id))
+                            ''', (session_id, tz_now(), leave_id))
                     elif session_type == 'checkout' and paired_session_id:
                         # 签退会话，更新为关联到签退
                         cursor.execute('''
                             UPDATE leave_requests
-                            SET paired_session_id = ?, used_at = CURRENT_TIMESTAMP
+                            SET paired_session_id = ?, used_at = ?
                             WHERE id = ?
-                        ''', (session_id, leave_id))
+                        ''', (session_id, tz_now(), leave_id))
                     else:
                         # 其他情况只更新 session_id
                         cursor.execute('''
                             UPDATE leave_requests
-                            SET status = 'used', session_id = ?, used_at = CURRENT_TIMESTAMP
+                            SET status = 'used', session_id = ?, used_at = ?
                             WHERE id = ?
-                        ''', (session_id, leave_id))
+                        ''', (session_id, tz_now(), leave_id))
 
                     # 添加积分记录（只在第一次请假时扣分）
                     points = points_map.get(leave_type, 0)
@@ -643,8 +643,8 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
                 # 无请假，标记为缺勤
                 cursor.execute('''
                     INSERT INTO attendance_records (session_id, user_id, status, checked_in_at)
-                    VALUES (?, ?, 'absent', CURRENT_TIMESTAMP)
-                ''', (session_id, user_id))
+                    VALUES (?, ?, 'absent', ?)
+                ''', (session_id, user_id, tz_now()))
 
                 # 扣除缺勤积分（避免重复扣分）
                 should_deduct_points = True

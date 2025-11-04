@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from werkzeug.security import generate_password_hash
+from timezone_utils import now
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), 'data', 'database.db')
 
@@ -12,6 +13,18 @@ def get_db():
 
     # Configure SQLite to use localtime for datetime functions
     conn.execute("PRAGMA localtime = 1")
+
+    # Set timezone for SQLite datetime functions
+    from timezone_utils import get_timezone
+    tz_name = str(get_timezone())
+    conn.execute(f"PRAGMA temp_store = 2")  # Use memory for temp storage
+
+    # Register custom functions for datetime handling
+    def local_timestamp():
+        """Return current timestamp in local timezone"""
+        return now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn.create_function("LOCAL_TIMESTAMP", 0, local_timestamp)
 
     return conn
 
@@ -29,7 +42,7 @@ def init_db():
             password_hash TEXT NOT NULL,
             is_admin BOOLEAN DEFAULT 0,
             must_change_password BOOLEAN DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP
         )
     ''')
 
@@ -38,7 +51,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS system_settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP
         )
     ''')
 
@@ -51,7 +64,7 @@ def init_db():
             session_type TEXT DEFAULT 'checkin',
             paired_session_id INTEGER,
             created_by INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             FOREIGN KEY (created_by) REFERENCES users(id),
             FOREIGN KEY (paired_session_id) REFERENCES attendance_sessions(id)
         )
@@ -63,7 +76,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
-            checked_in_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            checked_in_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             status TEXT DEFAULT 'present',
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id),
             FOREIGN KEY (user_id) REFERENCES users(id),
@@ -85,7 +98,7 @@ def init_db():
             approved_by INTEGER,
             approved_at TIMESTAMP,
             used_at TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id),
             FOREIGN KEY (paired_session_id) REFERENCES attendance_sessions(id),
@@ -100,7 +113,7 @@ def init_db():
             leave_request_id INTEGER NOT NULL,
             filename TEXT NOT NULL,
             filepath TEXT NOT NULL,
-            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            uploaded_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             FOREIGN KEY (leave_request_id) REFERENCES leave_requests(id) ON DELETE CASCADE
         )
     ''')
@@ -116,7 +129,7 @@ def init_db():
             session_id INTEGER,
             leave_request_id INTEGER,
             created_by INTEGER,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             is_deleted BOOLEAN DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id),
@@ -131,7 +144,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER NOT NULL,
             qr_token TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT LOCAL_TIMESTAMP,
             expires_at TIMESTAMP NOT NULL,
             is_used BOOLEAN DEFAULT 0,
             FOREIGN KEY (session_id) REFERENCES attendance_sessions(id)
@@ -183,7 +196,7 @@ def set_setting(key, value):
     cursor = conn.cursor()
     cursor.execute('''
         INSERT OR REPLACE INTO system_settings (key, value, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-    ''', (key, value))
+        VALUES (?, ?, ?)
+    ''', (key, value, now()))
     conn.commit()
     conn.close()
