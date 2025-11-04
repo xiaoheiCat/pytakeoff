@@ -79,6 +79,24 @@ class User(UserMixin):
         conn.commit()
         conn.close()
 
+    def rename_user(self, new_name):
+        """Update user's name"""
+        if not new_name or not new_name.strip():
+            return False
+
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE users SET name = ? WHERE id = ?',
+            (new_name.strip(), self.id)
+        )
+        conn.commit()
+        conn.close()
+
+        # Update object's name
+        self.name = new_name.strip()
+        return True
+
     @staticmethod
     def create_user(student_id, name, password=None):
         """Create new user"""

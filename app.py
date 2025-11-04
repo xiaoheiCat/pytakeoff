@@ -489,6 +489,28 @@ def reset_user_password(user_id):
 
     return redirect(url_for('admin_users'))
 
+@app.route('/admin/users/<int:user_id>/rename', methods=['POST'])
+@login_required
+@admin_required
+def rename_user(user_id):
+    """Rename user"""
+    user = User.get(user_id)
+    if not user or user.is_admin:
+        flash('用户不存在或无法更名', 'error')
+        return redirect(url_for('admin_users'))
+
+    new_name = request.form.get('new_name', '').strip()
+    if not new_name:
+        flash('新姓名不能为空', 'error')
+        return redirect(url_for('admin_users'))
+
+    if user.rename_user(new_name):
+        flash(f'用户姓名已从 "{user.name}" 更新为 "{new_name}"', 'success')
+    else:
+        flash('更新失败', 'error')
+
+    return redirect(url_for('admin_users'))
+
 # Import and register additional routes
 from app_attendance import register_attendance_routes
 from app_leave_points import register_leave_points_routes

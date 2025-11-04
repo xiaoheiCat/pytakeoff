@@ -39,8 +39,9 @@
                 <td>{{ user.name }}</td>
                 <td>{{ user.created_at }}</td>
                 <td>
+                    <button onclick="showRenameModal({{ user.id }}, '{{ user.name }}')" class="btn" style="padding: 4px 8px; font-size: 12px;">更名</button>
                     <form method="POST" action="{{ url_for('reset_user_password', user_id=user.id) }}" style="display: inline;">
-                        <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="return confirm('确定重置该用户密码为学工号吗？')">重置密码</button>
+                        <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; margin-left: 4px;" onclick="return confirm('确定重置该用户密码为学工号吗？')">重置密码</button>
                     </form>
                 </td>
             </tr>
@@ -77,5 +78,72 @@ function deleteSelected() {
         del_users_form.submit();
     }
 }
+
+// Rename modal functionality
+function showRenameModal(userId, currentName) {
+    document.getElementById('rename-user-id').value = userId;
+    document.getElementById('current-name').textContent = currentName;
+    document.getElementById('new-name').value = currentName;
+    document.getElementById('rename-form').action = `/admin/users/${userId}/rename`;
+    document.getElementById('rename-modal').style.display = 'block';
+    document.getElementById('new-name').focus();
+    document.getElementById('new-name').select();
+}
+
+function closeRenameModal() {
+    document.getElementById('rename-modal').style.display = 'none';
+}
+
+function submitRename() {
+    const newName = document.getElementById('new-name').value.trim();
+    if (!newName) {
+        alert('新姓名不能为空');
+        return false;
+    }
+
+    const form = document.getElementById('rename-form');
+    form.submit();
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('rename-modal');
+    if (event.target === modal) {
+        closeRenameModal();
+    }
+}
+
+// Handle ESC key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeRenameModal();
+    }
+    if (event.key === 'Enter' && document.getElementById('rename-modal').style.display === 'block') {
+        submitRename();
+    }
+}
 </script>
+
+<!-- Rename Modal -->
+<div id="rename-modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+    <div style="background-color: #fefefe; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 400px; max-width: 90%; border-radius: 4px;">
+        <h3 style="margin-top: 0;">更名用户</h3>
+        <p>当前姓名: <strong id="current-name"></strong></p>
+
+        <form id="rename-form" method="POST" onsubmit="return false;">
+            <input type="hidden" id="rename-user-id" name="user_id">
+
+            <div class="form-group">
+                <label for="new-name">新姓名:</label>
+                <input type="text" id="new-name" name="new_name" required style="width: 100%; padding: 8px; margin-top: 5px;">
+            </div>
+
+            <div style="margin-top: 20px; text-align: right;">
+                <button type="button" onclick="closeRenameModal()" class="btn btn-secondary">取消</button>
+                <button type="button" onclick="submitRename()" class="btn btn-success" style="margin-left: 8px;">确认更名</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}
