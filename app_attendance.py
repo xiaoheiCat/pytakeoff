@@ -137,7 +137,7 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
         ''', (session_id,))
         records = cursor.fetchall()
 
-        # Get users who haven't checked in - 不管是签到还是签退，都显示所有未操作的用户
+        # Get users who haven't checked in - 过滤掉已批准请假的用户，与签到显示保持一致
         cursor.execute('''
             SELECT u.id, u.name, u.student_id
             FROM users u
@@ -145,8 +145,12 @@ def register_attendance_routes(app, admin_required, password_change_required, ge
             AND u.id NOT IN (
                 SELECT ar.user_id FROM attendance_records ar WHERE ar.session_id = ?
             )
+            AND u.id NOT IN (
+                SELECT lr.user_id FROM leave_requests lr
+                WHERE (lr.session_id = ? OR lr.session_id IS NULL) AND lr.status = 'approved'
+            )
             ORDER BY u.student_id
-        ''', (session_id,))
+        ''', (session_id, session_id))
         not_checked_in = cursor.fetchall()
 
         conn.close()
