@@ -103,13 +103,14 @@ function submitRename() {
 
     const form = document.getElementById('rename-form');
     form.submit();
+    return true;
 }
 
 // Handle rename button clicks using event delegation
 document.addEventListener('click', function(event) {
     if (event.target.classList.contains('rename-btn')) {
-        const userId = event.target.dataset.userId;
-        const userName = JSON.parse(event.target.dataset.userName);
+        const userId = event.target.getAttribute('data-user-id');
+        const userName = JSON.parse(event.target.getAttribute('data-user-name'));
         showRenameModal(userId, userName);
     }
 });
@@ -139,7 +140,7 @@ document.addEventListener('keydown', function(event) {
         <h3 style="margin-top: 0;">更名用户</h3>
         <p>当前姓名: <strong id="current-name"></strong></p>
 
-        <form id="rename-form" method="POST" onsubmit="return false;">
+        <form id="rename-form" method="POST">
             <input type="hidden" id="rename-user-id" name="user_id">
 
             <div class="form-group">
