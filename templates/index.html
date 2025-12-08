@@ -8,7 +8,17 @@
     <p>学工号：{{ current_user.student_id }}</p>
     <p>当前积分：<strong style="font-size: 24px; color: #3498db;">{{ total_points }}</strong></p>
     <div style="margin-top: 20px;">
-        <a href="{{ url_for('request_leave') }}" class="btn">请假申请</a>
+        {% if blocking_leave_status %}
+            {% if blocking_leave_status == 'pending' %}
+                <button class="btn" disabled title="请联系管理员完成上一次请假的审批！">请假申请</button>
+                <p style="color: #e74c3c; font-size: 14px; margin-top: 10px;">请联系管理员完成上一次请假的审批！</p>
+            {% elif blocking_leave_status == 'approved' %}
+                <button class="btn" disabled title="您有一个待使用的请假，在使用之前。您不能再请一次！">请假申请</button>
+                <p style="color: #e74c3c; font-size: 14px; margin-top: 10px;">您有一个待使用的请假，在使用之前。您不能再请一次！</p>
+            {% endif %}
+        {% else %}
+            <a href="{{ url_for('request_leave') }}" class="btn">请假申请</a>
+        {% endif %}
         <a href="{{ url_for('change_password') }}" class="btn btn-secondary">修改密码</a>
     </div>
 </div>

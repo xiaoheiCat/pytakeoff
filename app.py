@@ -103,11 +103,15 @@ def index():
     leave_requests = cursor.fetchall()
     conn.close()
 
+    # Check if user has pending or approved leave requests that prevent new ones
+    blocking_leave_status = current_user.has_pending_or_approved_leave()
+
     return render_template('index.html',
                          system_title=system_title,
                          total_points=total_points,
                          points_history=points_history,
-                         leave_requests=leave_requests)
+                         leave_requests=leave_requests,
+                         blocking_leave_status=blocking_leave_status)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -303,6 +307,15 @@ def request_leave():
     """Request leave"""
     system_title = get_setting('system_title', '签到系统')
 
+    # Check if user has existing leave requests that prevent new ones
+    blocking_leave_status = current_user.has_pending_or_approved_leave()
+    if blocking_leave_status:
+        if blocking_leave_status == 'pending':
+            flash('请联系管理员完成上一次请假的审批！', 'error')
+        elif blocking_leave_status == 'approved':
+            flash('您有一个待使用的请假，在使用之前。您不能再请一次！', 'error')
+        return redirect(url_for('index'))
+
     if request.method == 'POST':
         leave_type = request.form.get('leave_type')
         reason = request.form.get('reason', '').strip()
@@ -314,6 +327,15 @@ def request_leave():
         if not reason:
             flash('请填写请假原因', 'error')
             return redirect(url_for('request_leave'))
+
+        # Double-check for blocking leave requests (in case someone submitted via direct POST)
+        blocking_status = current_user.has_pending_or_approved_leave()
+        if blocking_status:
+            if blocking_status == 'pending':
+                flash('请联系管理员完成上一次请假的审批！', 'error')
+            elif blocking_status == 'approved':
+                flash('您有一个待使用的请假，在使用之前。您不能再请一次！', 'error')
+            return redirect(url_for('index'))
 
         # Create leave request
         conn = get_db()
