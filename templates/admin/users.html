@@ -39,7 +39,7 @@
                 <td>{{ user.name }}</td>
                 <td>{{ user.created_at }}</td>
                 <td>
-                    <button class="btn rename-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name | e }}" style="padding: 4px 8px; font-size: 12px;">更名</button>
+                    <button class="btn rename-btn no-loading" data-user-id="{{ user.id }}" data-user-name="{{ user.name | e }}" style="padding: 4px 8px; font-size: 12px;">更名</button>
                     <form method="POST" action="{{ url_for('reset_user_password', user_id=user.id) }}" style="display: inline;">
                         <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; margin-left: 4px;" onclick="return confirm('确定重置该用户密码为学工号吗？')">重置密码</button>
                     </form>
