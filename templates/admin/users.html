@@ -82,13 +82,32 @@ function deleteSelected() {
 
 // Rename modal functionality
 function showRenameModal(userId, currentName) {
-    document.getElementById('rename-user-id').value = userId;
-    document.getElementById('current-name').textContent = currentName;
-    document.getElementById('new-name').value = currentName;
-    document.getElementById('rename-form').action = `/admin/users/${userId}/rename`;
-    document.getElementById('rename-modal').style.display = 'block';
-    document.getElementById('new-name').focus();
-    document.getElementById('new-name').select();
+    // Ensure modal elements exist
+    const modal = document.getElementById('rename-modal');
+    const userIdInput = document.getElementById('rename-user-id');
+    const currentNameSpan = document.getElementById('current-name');
+    const newNameInput = document.getElementById('new-name');
+    const form = document.getElementById('rename-form');
+
+    if (!modal || !userIdInput || !currentNameSpan || !newNameInput || !form) {
+        console.error('Modal elements not found');
+        return;
+    }
+
+    // Set modal data
+    userIdInput.value = userId;
+    currentNameSpan.textContent = currentName;
+    newNameInput.value = currentName;
+    form.action = `/admin/users/${userId}/rename`;
+
+    // Show modal immediately
+    modal.style.display = 'block';
+
+    // Focus and select text input (delay slightly to ensure modal is visible)
+    setTimeout(() => {
+        newNameInput.focus();
+        newNameInput.select();
+    }, 10);
 }
 
 function closeRenameModal() {
@@ -112,9 +131,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle rename button clicks using event delegation
     document.addEventListener('click', function(event) {
         if (event.target.classList.contains('rename-btn')) {
+            event.preventDefault(); // Prevent any default browser behavior
+            event.stopPropagation(); // Stop event bubbling
+
             const userId = event.target.getAttribute('data-user-id');
             const userName = event.target.getAttribute('data-user-name');
-            showRenameModal(userId, userName);
+
+            // Ensure we have valid data
+            if (userId && userName) {
+                showRenameModal(userId, userName);
+            }
         }
     });
 
