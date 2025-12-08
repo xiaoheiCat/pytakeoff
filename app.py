@@ -527,7 +527,7 @@ def rename_user(user_id):
         return redirect(url_for('admin_users'))
 
     if user.rename_user(new_name):
-        flash(f'用户姓名已从 "{user.name}" 更新为 "{new_name}"', 'success')
+        flash(f'用户姓名已更新为 "{new_name}"', 'success')
     else:
         flash('更新失败', 'error')
 
