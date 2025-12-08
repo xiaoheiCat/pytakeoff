@@ -39,7 +39,7 @@
                 <td>{{ user.name }}</td>
                 <td>{{ user.created_at }}</td>
                 <td>
-                    <button onclick="showRenameModal({{ user.id }}, {{ user.name | tojson }})" class="btn" style="padding: 4px 8px; font-size: 12px;">更名</button>
+                    <button class="btn rename-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name | tojson }}" style="padding: 4px 8px; font-size: 12px;">更名</button>
                     <form method="POST" action="{{ url_for('reset_user_password', user_id=user.id) }}" style="display: inline;">
                         <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; margin-left: 4px;" onclick="return confirm('确定重置该用户密码为学工号吗？')">重置密码</button>
                     </form>
@@ -104,6 +104,15 @@ function submitRename() {
     const form = document.getElementById('rename-form');
     form.submit();
 }
+
+// Handle rename button clicks using event delegation
+document.addEventListener('click', function(event) {
+    if (event.target.classList.contains('rename-btn')) {
+        const userId = event.target.dataset.userId;
+        const userName = JSON.parse(event.target.dataset.userName);
+        showRenameModal(userId, userName);
+    }
+});
 
 // Close modal when clicking outside
 window.onclick = function(event) {
