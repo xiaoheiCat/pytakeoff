@@ -51,6 +51,7 @@
 </div>
 
 <script>
+// Global functions for modal functionality
 function toggleAll(source) {
     const checkboxes = document.querySelectorAll('input[name="user_ids"]');
     checkboxes.forEach(cb => cb.checked = source.checked);
@@ -106,13 +107,26 @@ function submitRename() {
     return true;
 }
 
-// Handle rename button clicks using event delegation
-document.addEventListener('click', function(event) {
-    if (event.target.classList.contains('rename-btn')) {
-        const userId = event.target.getAttribute('data-user-id');
-        const userName = JSON.parse(event.target.getAttribute('data-user-name'));
-        showRenameModal(userId, userName);
-    }
+// Event listeners setup
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle rename button clicks using event delegation
+    document.addEventListener('click', function(event) {
+        if (event.target.classList.contains('rename-btn')) {
+            const userId = event.target.getAttribute('data-user-id');
+            const userName = JSON.parse(event.target.getAttribute('data-user-name'));
+            showRenameModal(userId, userName);
+        }
+    });
+
+    // Handle ESC key
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeRenameModal();
+        }
+        if (event.key === 'Enter' && document.getElementById('rename-modal').style.display === 'block') {
+            submitRename();
+        }
+    });
 });
 
 // Close modal when clicking outside
@@ -120,16 +134,6 @@ window.onclick = function(event) {
     const modal = document.getElementById('rename-modal');
     if (event.target === modal) {
         closeRenameModal();
-    }
-}
-
-// Handle ESC key
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-        closeRenameModal();
-    }
-    if (event.key === 'Enter' && document.getElementById('rename-modal').style.display === 'block') {
-        submitRename();
     }
 }
 </script>
