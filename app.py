@@ -311,9 +311,9 @@ def request_leave():
     blocking_leave_status = current_user.has_pending_or_approved_leave()
     if blocking_leave_status:
         if blocking_leave_status == 'pending':
-            flash('请联系管理员完成上一次请假的审批！', 'error')
+            flash('在新建请假申请之前，您需要先联系管理员完成上一次请假的审批！', 'error')
         elif blocking_leave_status == 'approved':
-            flash('您有一个待使用的请假，在使用之前。您不能再请一次！', 'error')
+            flash('您有一个待使用的请假，在使用之前，您不能再请一次！', 'error')
         return redirect(url_for('index'))
 
     if request.method == 'POST':
