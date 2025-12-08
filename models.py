@@ -164,3 +164,19 @@ class User(UserMixin):
         rows = cursor.fetchall()
         conn.close()
         return rows
+
+    def has_pending_or_approved_leave(self):
+        """Check if user has pending or approved leave requests that prevent new ones"""
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT status FROM leave_requests
+            WHERE user_id = ? AND status IN ('pending', 'approved')
+            LIMIT 1
+        ''', (self.id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return row['status']  # Returns 'pending' or 'approved'
+        return None
