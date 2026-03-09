@@ -1,11 +1,9 @@
 # Leave and points management routes (to be imported into app.py)
 
-from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, session
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_login import login_required, current_user
 import csv
 import io
-import secrets
-import string
 import os
 
 from database import get_db, get_setting, set_setting
@@ -466,32 +464,21 @@ def register_leave_points_routes(app, admin_required, password_change_required):
                              system_title=system_title,
                              settings=settings)
 
-    @app.route('/api/generate-captcha')
-    @login_required
-    @admin_required
-    def generate_captcha():
-        """Generate a random captcha code and store in session"""
-        chars = string.ascii_letters + string.digits
-        code = ''.join(secrets.choice(chars) for _ in range(8))
-        session['captcha_code'] = code
-        return jsonify({'code': code})
-
     @app.route('/admin/points/clear-all', methods=['POST'])
     @login_required
     @admin_required
     def clear_all_points():
-        """Clear all points records"""
-        captcha_input = request.form.get('captcha', '').strip()
-        captcha_expected = session.pop('captcha_code', None)
+        """Clear all points records (soft delete)"""
+        confirmation = request.form.get('confirmation', '').strip()
 
-        if not captcha_expected or captcha_input != captcha_expected:
-            flash('验证码错误，操作已取消', 'error')
+        if confirmation != '清空积分':
+            flash('确认文本不正确，操作已取消', 'error')
             return redirect(url_for('admin_points'))
 
         conn = get_db()
         cursor = conn.cursor()
         try:
-            cursor.execute('DELETE FROM points_records')
+            cursor.execute('UPDATE points_records SET is_deleted = 1 WHERE is_deleted = 0')
             conn.commit()
             flash('已清空所有积分记录', 'success')
         except Exception as e:
@@ -507,11 +494,10 @@ def register_leave_points_routes(app, admin_required, password_change_required):
     @admin_required
     def system_initialize():
         """Initialize system - clear all business data"""
-        captcha_input = request.form.get('captcha', '').strip()
-        captcha_expected = session.pop('captcha_code', None)
+        confirmation = request.form.get('confirmation', '').strip()
 
-        if not captcha_expected or captcha_input != captcha_expected:
-            flash('验证码错误，操作已取消', 'error')
+        if confirmation != '初始化系统':
+            flash('确认文本不正确，操作已取消', 'error')
             return redirect(url_for('admin_points'))
 
         conn = get_db()
@@ -529,8 +515,8 @@ def register_leave_points_routes(app, admin_required, password_change_required):
                 if os.path.exists(filepath):
                     try:
                         os.remove(filepath)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        app.logger.warning('Failed to delete attachment file %s during system initialization: %s', filepath, e)
 
             cursor.execute('DELETE FROM leave_attachments')
             cursor.execute('DELETE FROM leave_requests')
@@ -562,4 +548,6 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         finally:
             conn.close()
 
+        # Redirect to dashboard instead of points page because system_initialize
+        # deletes all non-admin users, making the points page empty and meaningless.
         return redirect(url_for('admin_dashboard'))
