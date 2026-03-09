@@ -53,6 +53,45 @@
     </table>
 </div>
 
+<!-- 危险操作区域 -->
+<div class="card" style="margin-top: 30px; border: 2px solid #e74c3c;">
+    <h2 style="color: #e74c3c;">危险操作</h2>
+    <p style="color: #95a5a6; margin-bottom: 20px;">以下操作不可撤销，请谨慎使用。执行前需要输入图片验证码确认。</p>
+    <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+        <button onclick="openCaptchaModal('clear_points')" class="btn" style="background: #e74c3c; color: white; border: none;">
+            一键清空所有积分
+        </button>
+        <button onclick="openCaptchaModal('init_system')" class="btn" style="background: #c0392b; color: white; border: none;">
+            一键初始化系统
+        </button>
+    </div>
+</div>
+
+<!-- 验证码确认模态框 -->
+<div id="captchaModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 2000;">
+    <div style="position: relative; background: white; margin: 80px auto; padding: 30px; max-width: 480px; border-radius: 8px;">
+        <h3 id="captchaModalTitle" style="color: #e74c3c; margin-bottom: 10px;"></h3>
+        <p id="captchaModalWarning" style="color: #e74c3c; font-size: 14px; margin-bottom: 20px; padding: 10px; background: #fdf2f2; border-radius: 4px;"></p>
+        <div style="text-align: center; margin-bottom: 15px;">
+            <canvas id="captchaCanvas" width="280" height="70" style="border: 1px solid #ddd; border-radius: 4px; cursor: not-allowed; user-select: none; -webkit-user-select: none;"></canvas>
+            <br>
+            <button type="button" onclick="refreshCaptcha()" style="margin-top: 8px; background: none; border: 1px solid #3498db; color: #3498db; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">
+                换一个
+            </button>
+        </div>
+        <form id="captchaForm" method="POST" action="">
+            <div class="form-group">
+                <label style="font-weight: bold;">请输入上图中的验证码（区分大小写）</label>
+                <input type="text" class="form-control" name="captcha" id="captchaInput" required autocomplete="off" style="font-size: 18px; letter-spacing: 3px; text-align: center;">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button type="submit" class="btn" id="captchaSubmitBtn" style="background: #e74c3c; color: white; border: none; flex: 1;"></button>
+                <button type="button" onclick="closeCaptchaModal()" class="btn btn-secondary" style="flex: 1;">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- 积分详情模态框 -->
 <div id="historyModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
     <div style="position: relative; background: white; margin: 50px auto; padding: 20px; max-width: 800px; border-radius: 8px; max-height: 80vh; overflow-y: auto;">
@@ -144,5 +183,137 @@ document.getElementById('historyModal').addEventListener('click', function(e) {
         closeHistory();
     }
 });
+
+// ========== 验证码模态框逻辑 ==========
+let currentAction = '';
+
+const actionConfig = {
+    clear_points: {
+        title: '一键清空所有积分',
+        warning: '此操作将永久删除所有用户的全部积分记录，且无法恢复！请确认您已备份数据。',
+        submitText: '确认清空所有积分',
+        formAction: '{{ url_for("clear_all_points") }}'
+    },
+    init_system: {
+        title: '一键初始化系统',
+        warning: '此操作将删除所有签到记录、请假记录、积分记录、非管理员用户，并重置系统设置为默认值。此操作不可逆！',
+        submitText: '确认初始化系统',
+        formAction: '{{ url_for("system_initialize") }}'
+    }
+};
+
+function openCaptchaModal(action) {
+    currentAction = action;
+    const config = actionConfig[action];
+    document.getElementById('captchaModalTitle').textContent = config.title;
+    document.getElementById('captchaModalWarning').textContent = config.warning;
+    document.getElementById('captchaSubmitBtn').textContent = config.submitText;
+    document.getElementById('captchaForm').action = config.formAction;
+    document.getElementById('captchaInput').value = '';
+    document.getElementById('captchaModal').style.display = 'block';
+    refreshCaptcha();
+}
+
+function closeCaptchaModal() {
+    document.getElementById('captchaModal').style.display = 'none';
+    currentAction = '';
+}
+
+// 点击模态框外部关闭
+document.getElementById('captchaModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeCaptchaModal();
+    }
+});
+
+async function refreshCaptcha() {
+    try {
+        const response = await fetch('/api/generate-captcha');
+        const data = await response.json();
+        drawCaptcha(data.code);
+    } catch (error) {
+        console.error('获取验证码失败', error);
+    }
+}
+
+function drawCaptcha(code) {
+    const canvas = document.getElementById('captchaCanvas');
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // 清空画布
+    ctx.clearRect(0, 0, width, height);
+
+    // 随机背景色（浅色）
+    ctx.fillStyle = `hsl(${Math.random() * 360}, 30%, 95%)`;
+    ctx.fillRect(0, 0, width, height);
+
+    // 绘制随机干扰线条
+    for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = `rgba(${Math.random()*200|0}, ${Math.random()*200|0}, ${Math.random()*200|0}, 0.4)`;
+        ctx.lineWidth = Math.random() * 2 + 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * width, Math.random() * height);
+        ctx.bezierCurveTo(
+            Math.random() * width, Math.random() * height,
+            Math.random() * width, Math.random() * height,
+            Math.random() * width, Math.random() * height
+        );
+        ctx.stroke();
+    }
+
+    // 绘制随机噪点
+    for (let i = 0; i < 80; i++) {
+        ctx.fillStyle = `rgba(${Math.random()*255|0}, ${Math.random()*255|0}, ${Math.random()*255|0}, 0.5)`;
+        ctx.beginPath();
+        ctx.arc(Math.random() * width, Math.random() * height, Math.random() * 2 + 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 逐字符绘制验证码
+    const startX = 15;
+    const charWidth = (width - 30) / code.length;
+
+    for (let i = 0; i < code.length; i++) {
+        ctx.save();
+        const x = startX + i * charWidth + charWidth / 2;
+        const y = height / 2;
+
+        // 随机旋转
+        const angle = (Math.random() - 0.5) * 0.6;
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+
+        // 随机颜色（深色，确保可读）
+        const hue = Math.random() * 360;
+        ctx.fillStyle = `hsl(${hue}, 70%, ${25 + Math.random() * 20}%)`;
+
+        // 随机字体大小
+        const fontSize = 26 + Math.random() * 8;
+        ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // 随机偏移
+        const offsetY = (Math.random() - 0.5) * 12;
+        ctx.fillText(code[i], 0, offsetY);
+
+        ctx.restore();
+    }
+
+    // 再叠加一些干扰线
+    for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = `rgba(${Math.random()*180|0}, ${Math.random()*180|0}, ${Math.random()*180|0}, 0.3)`;
+        ctx.lineWidth = Math.random() * 1.5 + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(Math.random() * width, Math.random() * height);
+        ctx.lineTo(Math.random() * width, Math.random() * height);
+        ctx.stroke();
+    }
+
+    // 禁止右键菜单
+    canvas.oncontextmenu = function(e) { e.preventDefault(); return false; };
+}
 </script>
 {% endblock %}

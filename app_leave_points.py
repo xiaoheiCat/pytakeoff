@@ -1,9 +1,12 @@
 # Leave and points management routes (to be imported into app.py)
 
-from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_login import login_required, current_user
 import csv
 import io
+import secrets
+import string
+import os
 
 from database import get_db, get_setting, set_setting
 from models import User
@@ -462,3 +465,101 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         return render_template('admin/settings.html',
                              system_title=system_title,
                              settings=settings)
+
+    @app.route('/api/generate-captcha')
+    @login_required
+    @admin_required
+    def generate_captcha():
+        """Generate a random captcha code and store in session"""
+        chars = string.ascii_letters + string.digits
+        code = ''.join(secrets.choice(chars) for _ in range(8))
+        session['captcha_code'] = code
+        return jsonify({'code': code})
+
+    @app.route('/admin/points/clear-all', methods=['POST'])
+    @login_required
+    @admin_required
+    def clear_all_points():
+        """Clear all points records"""
+        captcha_input = request.form.get('captcha', '').strip()
+        captcha_expected = session.pop('captcha_code', None)
+
+        if not captcha_expected or captcha_input != captcha_expected:
+            flash('验证码错误，操作已取消', 'error')
+            return redirect(url_for('admin_points'))
+
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('DELETE FROM points_records')
+            conn.commit()
+            flash('已清空所有积分记录', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'清空积分失败: {str(e)}', 'error')
+        finally:
+            conn.close()
+
+        return redirect(url_for('admin_points'))
+
+    @app.route('/admin/system/initialize', methods=['POST'])
+    @login_required
+    @admin_required
+    def system_initialize():
+        """Initialize system - clear all business data"""
+        captcha_input = request.form.get('captcha', '').strip()
+        captcha_expected = session.pop('captcha_code', None)
+
+        if not captcha_expected or captcha_input != captcha_expected:
+            flash('验证码错误，操作已取消', 'error')
+            return redirect(url_for('admin_points'))
+
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            # Delete all business data in correct order (foreign key dependencies)
+            cursor.execute('DELETE FROM points_records')
+            cursor.execute('DELETE FROM qr_codes')
+
+            # Delete leave attachment files from disk
+            cursor.execute('SELECT filepath FROM leave_attachments')
+            attachments = cursor.fetchall()
+            for att in attachments:
+                filepath = att['filepath']
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception:
+                        pass
+
+            cursor.execute('DELETE FROM leave_attachments')
+            cursor.execute('DELETE FROM leave_requests')
+            cursor.execute('DELETE FROM attendance_records')
+            cursor.execute('DELETE FROM attendance_sessions')
+            cursor.execute('DELETE FROM users WHERE is_admin = 0')
+
+            # Reset system settings to defaults
+            default_settings = {
+                'system_title': os.getenv('SYSTEM_TITLE', '签到系统'),
+                'qr_refresh_interval': os.getenv('QR_REFRESH_INTERVAL', '15'),
+                'checkin_points': '1',
+                'public_leave_points': '0',
+                'personal_leave_points': '-1',
+                'sick_leave_points': '-0.5',
+                'absent_points': '-2'
+            }
+            for key, value in default_settings.items():
+                cursor.execute('''
+                    INSERT OR REPLACE INTO system_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                ''', (key, value, tz_now()))
+
+            conn.commit()
+            flash('系统已初始化，所有业务数据已清空', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'系统初始化失败: {str(e)}', 'error')
+        finally:
+            conn.close()
+
+        return redirect(url_for('admin_dashboard'))
