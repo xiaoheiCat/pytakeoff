@@ -502,21 +502,19 @@ def register_leave_points_routes(app, admin_required, password_change_required):
 
         conn = get_db()
         cursor = conn.cursor()
+        # Collect attachment file paths before DB operations so we can
+        # delete them from disk only after a successful commit.
+        files_to_delete = []
         try:
-            # Delete all business data in correct order (foreign key dependencies)
-            cursor.execute('DELETE FROM points_records')
+            # Soft-delete points_records to preserve audit trail
+            cursor.execute('UPDATE points_records SET is_deleted = 1 WHERE is_deleted = 0')
             cursor.execute('DELETE FROM qr_codes')
 
-            # Delete leave attachment files from disk
+            # Collect leave attachment file paths for post-commit cleanup
             cursor.execute('SELECT filepath FROM leave_attachments')
             attachments = cursor.fetchall()
             for att in attachments:
-                filepath = att['filepath']
-                if os.path.exists(filepath):
-                    try:
-                        os.remove(filepath)
-                    except Exception as e:
-                        app.logger.warning('Failed to delete attachment file %s during system initialization: %s', filepath, e)
+                files_to_delete.append(att['filepath'])
 
             cursor.execute('DELETE FROM leave_attachments')
             cursor.execute('DELETE FROM leave_requests')
@@ -541,6 +539,15 @@ def register_leave_points_routes(app, admin_required, password_change_required):
                 ''', (key, value, tz_now()))
 
             conn.commit()
+
+            # Delete attachment files from disk only after successful commit
+            for filepath in files_to_delete:
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception as e:
+                        app.logger.warning('Failed to delete attachment file %s during system initialization: %s', filepath, e)
+
             flash('系统已初始化，所有业务数据已清空', 'success')
         except Exception as e:
             conn.rollback()

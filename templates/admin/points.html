@@ -127,6 +127,9 @@
         padding: 4px 8px;
         font-size: 12px;
     }
+    .inline-form {
+        display: inline;
+    }
 </style>
 {% endblock %}
 {% block content %}
@@ -271,7 +274,7 @@ async function viewHistory(userId) {
                     html += `<td>${record.reason}</td>`;
                     html += '<td>';
                     if (record.record_type === 'manual' && !record.is_deleted) {
-                        html += `<form method="POST" action="/admin/points/${record.id}/revoke" style="display: inline;" onsubmit="return confirm('确定要撤销此积分记录吗？');">`;
+                        html += `<form method="POST" action="/admin/points/${record.id}/revoke" class="inline-form" onsubmit="return confirm('确定要撤销此积分记录吗？');">`;
                         html += '<button type="submit" class="btn btn-danger btn-sm">撤销</button>';
                         html += '</form>';
                     } else if (record.is_deleted) {
