@@ -4,6 +4,7 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, s
 from flask_login import login_required, current_user
 import csv
 import io
+import os
 
 from database import get_db, get_setting, set_setting
 from models import User
@@ -199,21 +200,21 @@ def register_leave_points_routes(app, admin_required, password_change_required):
                 WHERE leave_request_id = ?
             ''', (leave_id,))
 
-            # Delete attachments from database (CASCADE will handle this)
-            # But we need to delete physical files first
-            for attachment in attachments:
-                filepath = attachment['filepath']
-                if os.path.exists(filepath):
-                    try:
-                        os.remove(filepath)
-                    except Exception as e:
-                        # Log error but continue with deletion
-                        print(f"Failed to delete file {filepath}: {e}")
+            # Collect file paths before DB deletion
+            files_to_delete = [att['filepath'] for att in attachments]
 
             # Delete leave request (CASCADE will delete attachments)
             cursor.execute('DELETE FROM leave_requests WHERE id = ?', (leave_id,))
 
             conn.commit()
+
+            # Delete attachment files from disk only after successful commit
+            for filepath in files_to_delete:
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception as e:
+                        app.logger.warning('Failed to delete attachment file %s: %s', filepath, e)
             flash('请假记录已删除', 'success')
 
         except Exception as e:
@@ -462,3 +463,102 @@ def register_leave_points_routes(app, admin_required, password_change_required):
         return render_template('admin/settings.html',
                              system_title=system_title,
                              settings=settings)
+
+    @app.route('/admin/points/clear-all', methods=['POST'])
+    @login_required
+    @admin_required
+    def clear_all_points():
+        """Clear all points records (soft delete)"""
+        confirmation = request.form.get('confirmation', '').strip()
+
+        if confirmation != '清空积分':
+            flash('确认文本不正确，操作已取消', 'error')
+            return redirect(url_for('admin_points'))
+
+        conn = get_db()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('UPDATE points_records SET is_deleted = 1 WHERE is_deleted = 0')
+            conn.commit()
+            flash('已清空所有积分记录', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'清空积分失败: {str(e)}', 'error')
+        finally:
+            conn.close()
+
+        return redirect(url_for('admin_points'))
+
+    @app.route('/admin/system/initialize', methods=['POST'])
+    @login_required
+    @admin_required
+    def system_initialize():
+        """Initialize system - clear all business data"""
+        confirmation = request.form.get('confirmation', '').strip()
+
+        if confirmation != '初始化系统':
+            flash('确认文本不正确，操作已取消', 'error')
+            return redirect(url_for('admin_points'))
+
+        conn = get_db()
+        cursor = conn.cursor()
+        # Collect attachment file paths before DB operations so we can
+        # delete them from disk only after a successful commit.
+        files_to_delete = []
+        try:
+            # Hard-delete points_records during system initialization.
+            # Normally we soft-delete to preserve audit trail, but here all
+            # referenced tables (users, sessions, leave_requests) are also
+            # being deleted, so soft-deleted records would have dangling
+            # foreign keys and no meaningful audit context.
+            cursor.execute('DELETE FROM points_records')
+            cursor.execute('DELETE FROM qr_codes')
+
+            # Collect leave attachment file paths for post-commit cleanup
+            cursor.execute('SELECT filepath FROM leave_attachments')
+            attachments = cursor.fetchall()
+            for att in attachments:
+                files_to_delete.append(att['filepath'])
+
+            cursor.execute('DELETE FROM leave_attachments')
+            cursor.execute('DELETE FROM leave_requests')
+            cursor.execute('DELETE FROM attendance_records')
+            cursor.execute('DELETE FROM attendance_sessions')
+            cursor.execute('DELETE FROM users WHERE is_admin = 0')
+
+            # Reset system settings to defaults
+            default_settings = {
+                'system_title': os.getenv('SYSTEM_TITLE', '签到系统'),
+                'qr_refresh_interval': os.getenv('QR_REFRESH_INTERVAL', '15'),
+                'checkin_points': '1',
+                'public_leave_points': '0',
+                'personal_leave_points': '-1',
+                'sick_leave_points': '-0.5',
+                'absent_points': '-2'
+            }
+            for key, value in default_settings.items():
+                cursor.execute('''
+                    INSERT OR REPLACE INTO system_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                ''', (key, value, tz_now()))
+
+            conn.commit()
+
+            # Delete attachment files from disk only after successful commit
+            for filepath in files_to_delete:
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception as e:
+                        app.logger.warning('Failed to delete attachment file %s during system initialization: %s', filepath, e)
+
+            flash('系统已初始化，所有业务数据已清空', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'系统初始化失败: {str(e)}', 'error')
+        finally:
+            conn.close()
+
+        # Redirect to dashboard instead of points page because system_initialize
+        # deletes all non-admin users, making the points page empty and meaningless.
+        return redirect(url_for('admin_dashboard'))

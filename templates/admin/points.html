@@ -1,14 +1,156 @@
 {% extends "base.html" %}
 {% block title %}积分管理 - {{ system_title }}{% endblock %}
+{% block extra_css %}
+<style>
+    .danger-zone {
+        margin-top: 30px;
+        border: 2px solid #e74c3c;
+    }
+    .danger-zone h2 {
+        color: #e74c3c;
+    }
+    .danger-zone-description {
+        color: #95a5a6;
+        margin-bottom: 20px;
+    }
+    .danger-zone-actions {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    .btn-danger-dark {
+        background: #c0392b;
+    }
+    .btn-danger-dark:hover {
+        background: #a93226;
+    }
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+    }
+    .modal-container {
+        position: relative;
+        background: white;
+        margin: 80px auto;
+        padding: 30px;
+        max-width: 480px;
+        border-radius: 8px;
+    }
+    .modal-title-danger {
+        color: #e74c3c;
+        margin-bottom: 10px;
+    }
+    .modal-warning {
+        color: #e74c3c;
+        font-size: 14px;
+        margin-bottom: 20px;
+        padding: 10px;
+        background: #fdf2f2;
+        border-radius: 4px;
+    }
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+    .modal-actions .btn {
+        flex: 1;
+    }
+    .confirmation-hint {
+        font-size: 14px;
+        color: #555;
+        margin-bottom: 5px;
+    }
+    .confirmation-phrase {
+        font-weight: bold;
+        color: #e74c3c;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    .confirmation-input {
+        font-size: 16px;
+        text-align: center;
+        letter-spacing: 2px;
+    }
+    .history-modal-container {
+        position: relative;
+        background: white;
+        margin: 50px auto;
+        padding: 20px;
+        max-width: 800px;
+        border-radius: 8px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+    .modal-close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 5px 10px;
+    }
+    .points-summary {
+        margin: 15px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    .points-summary p {
+        margin: 0;
+        font-size: 18px;
+    }
+    .total-points-value {
+        font-weight: bold;
+        font-size: 24px;
+    }
+    .text-muted {
+        color: #95a5a6;
+    }
+    .text-center {
+        text-align: center;
+    }
+    .text-positive {
+        color: #27ae60;
+    }
+    .text-negative {
+        color: #e74c3c;
+    }
+    .font-bold {
+        font-weight: bold;
+    }
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    .action-bar {
+        margin-bottom: 20px;
+    }
+    .add-form-panel {
+        display: none;
+        margin-bottom: 20px;
+        padding: 20px;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    .inline-form {
+        display: inline;
+    }
+</style>
+{% endblock %}
 {% block content %}
 <div class="card">
     <h2>积分管理</h2>
-    <div style="margin-bottom: 20px;">
+    <div class="action-bar">
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">返回后台</a>
         <button onclick="document.getElementById('add-form').style.display='block'" class="btn btn-success">手动加减分</button>
         <a href="{{ url_for('export_leave_history') }}" class="btn" download>导出积分统计</a>
     </div>
-    <div id="add-form" style="display: none; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
+    <div id="add-form" class="add-form-panel">
         <h3>手动加减分</h3>
         <form method="POST" action="{{ url_for('add_points') }}">
             <div class="form-group">
@@ -41,11 +183,11 @@
             <tr>
                 <td>{{ user.student_id }}</td>
                 <td>{{ user.name }}</td>
-                <td style="font-weight: bold; {% if user.total_points >= 0 %}color: #27ae60;{% else %}color: #e74c3c;{% endif %}">
+                <td class="font-bold {% if user.total_points >= 0 %}text-positive{% else %}text-negative{% endif %}">
                     {{ "%.1f" | format(user.total_points) }}
                 </td>
                 <td>
-                    <button onclick="viewHistory({{ user.id }})" class="btn" style="padding: 4px 8px; font-size: 12px;">查看详情</button>
+                    <button onclick="viewHistory({{ user.id }})" class="btn btn-sm">查看详情</button>
                 </td>
             </tr>
             {% endfor %}
@@ -53,21 +195,62 @@
     </table>
 </div>
 
+<!-- 危险操作区域 -->
+<div class="card danger-zone">
+    <h2>危险操作</h2>
+    <p class="danger-zone-description">以下操作不可撤销，请谨慎使用。执行前需要输入确认文本。</p>
+    <div class="danger-zone-actions">
+        <button onclick="openConfirmModal('clear_points')" class="btn btn-danger">
+            一键清空所有积分
+        </button>
+        <button onclick="openConfirmModal('init_system')" class="btn btn-danger btn-danger-dark">
+            一键初始化系统
+        </button>
+    </div>
+</div>
+
+<!-- 确认操作模态框 -->
+<div id="confirmModal" class="modal-overlay">
+    <div class="modal-container">
+        <h3 id="confirmModalTitle" class="modal-title-danger"></h3>
+        <p id="confirmModalWarning" class="modal-warning"></p>
+        <form id="confirmForm" method="POST" action="">
+            <div class="form-group">
+                <p class="confirmation-hint">
+                    请输入 <span id="confirmPhrase" class="confirmation-phrase"></span> 以确认操作
+                </p>
+                <input type="text" class="form-control confirmation-input" name="confirmation" id="confirmInput" required autocomplete="off" placeholder="">
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn btn-danger" id="confirmSubmitBtn" disabled></button>
+                <button type="button" onclick="closeConfirmModal()" class="btn btn-secondary">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- 积分详情模态框 -->
-<div id="historyModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000;">
-    <div style="position: relative; background: white; margin: 50px auto; padding: 20px; max-width: 800px; border-radius: 8px; max-height: 80vh; overflow-y: auto;">
+<div id="historyModal" class="modal-overlay">
+    <div class="history-modal-container">
         <h3 id="modalTitle">积分详情</h3>
-        <button onclick="closeHistory()" style="position: absolute; top: 10px; right: 10px; background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">关闭</button>
-        <div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">
-            <p style="margin: 0; font-size: 18px;"><strong>总积分：</strong><span id="totalPoints" style="font-weight: bold; font-size: 24px;"></span></p>
+        <button onclick="closeHistory()" class="btn btn-danger modal-close-btn">关闭</button>
+        <div class="points-summary">
+            <p><strong>总积分：</strong><span id="totalPoints" class="total-points-value"></span></p>
         </div>
-        <div id="historyList" style="margin-top: 20px;">
-            <p style="text-align: center; color: #95a5a6;">加载中...</p>
+        <div id="historyList">
+            <p class="text-center text-muted">加载中...</p>
         </div>
     </div>
 </div>
 
 <script>
+// ========== 积分详情模态框 ==========
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 async function viewHistory(userId) {
     const modal = document.getElementById('historyModal');
     const list = document.getElementById('historyList');
@@ -75,7 +258,7 @@ async function viewHistory(userId) {
     const modalTitle = document.getElementById('modalTitle');
 
     modal.style.display = 'block';
-    list.innerHTML = '<p style="text-align: center; color: #95a5a6;">加载中...</p>';
+    list.innerHTML = '<p class="text-center text-muted">加载中...</p>';
 
     try {
         const response = await fetch(`/admin/points/user/${userId}`);
@@ -85,12 +268,10 @@ async function viewHistory(userId) {
             modalTitle.textContent = `${data.user.name} (${data.user.student_id}) 的积分详情`;
             const points = data.total_points || 0;
             totalPoints.textContent = points.toFixed(1);
-            totalPoints.style.color = points >= 0 ? '#27ae60' : '#e74c3c';
+            totalPoints.className = 'total-points-value ' + (points >= 0 ? 'text-positive' : 'text-negative');
 
             if (data.points_history && data.points_history.length > 0) {
-                let html = '<table style="width: 100%; border-collapse: collapse;">';
-                html += '<thead><tr style="background: #f8f9fa;"><th style="padding: 10px; border: 1px solid #ddd;">时间</th><th style="padding: 10px; border: 1px solid #ddd;">分数</th><th style="padding: 10px; border: 1px solid #ddd;">类型</th><th style="padding: 10px; border: 1px solid #ddd;">原因</th><th style="padding: 10px; border: 1px solid #ddd;">操作</th></tr></thead>';
-                html += '<tbody>';
+                let html = '<table><thead><tr><th>时间</th><th>分数</th><th>类型</th><th>原因</th><th>操作</th></tr></thead><tbody>';
 
                 const typeNames = {
                     'absence': '缺勤',
@@ -100,37 +281,36 @@ async function viewHistory(userId) {
                 };
 
                 data.points_history.forEach(record => {
-                    const pointsColor = record.points >= 0 ? '#27ae60' : '#e74c3c';
+                    const pointsClass = record.points >= 0 ? 'text-positive' : 'text-negative';
                     const typeName = typeNames[record.record_type] || record.record_type;
                     html += '<tr>';
-                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${record.created_at}</td>`;
-                    html += `<td style="padding: 10px; border: 1px solid #ddd; color: ${pointsColor}; font-weight: bold;">${record.points > 0 ? '+' : ''}${record.points.toFixed(1)}</td>`;
-                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${typeName}</td>`;
-                    html += `<td style="padding: 10px; border: 1px solid #ddd;">${record.reason}</td>`;
-                    html += `<td style="padding: 10px; border: 1px solid #ddd;">`;
+                    html += `<td>${escapeHtml(record.created_at)}</td>`;
+                    html += `<td class="${pointsClass} font-bold">${record.points > 0 ? '+' : ''}${record.points.toFixed(1)}</td>`;
+                    html += `<td>${escapeHtml(typeName)}</td>`;
+                    html += `<td>${escapeHtml(record.reason)}</td>`;
+                    html += '<td>';
                     if (record.record_type === 'manual' && !record.is_deleted) {
-                        html += `<form method="POST" action="/admin/points/${record.id}/revoke" style="display: inline;" onsubmit="return confirm('确定要撤销此积分记录吗？');">`;
-                        html += '<button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">撤销</button>';
+                        html += `<form method="POST" action="/admin/points/${record.id}/revoke" class="inline-form" onsubmit="return confirm('确定要撤销此积分记录吗？');">`;
+                        html += '<button type="submit" class="btn btn-danger btn-sm">撤销</button>';
                         html += '</form>';
                     } else if (record.is_deleted) {
-                        html += '<span style="color: #95a5a6;">已撤销</span>';
+                        html += '<span class="text-muted">已撤销</span>';
                     } else {
                         html += '-';
                     }
-                    html += '</td>';
-                    html += '</tr>';
+                    html += '</td></tr>';
                 });
 
                 html += '</tbody></table>';
                 list.innerHTML = html;
             } else {
-                list.innerHTML = '<p style="text-align: center; color: #95a5a6;">暂无积分记录</p>';
+                list.innerHTML = '<p class="text-center text-muted">暂无积分记录</p>';
             }
         } else {
-            list.innerHTML = '<p style="text-align: center; color: #e74c3c;">加载失败</p>';
+            list.innerHTML = '<p class="text-center text-negative">加载失败</p>';
         }
     } catch (error) {
-        list.innerHTML = '<p style="text-align: center; color: #e74c3c;">加载失败</p>';
+        list.innerHTML = '<p class="text-center text-negative">加载失败</p>';
     }
 }
 
@@ -138,10 +318,58 @@ function closeHistory() {
     document.getElementById('historyModal').style.display = 'none';
 }
 
-// 点击模态框外部关闭
 document.getElementById('historyModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeHistory();
+    if (e.target === this) closeHistory();
+});
+
+// ========== 确认操作模态框 ==========
+let currentAction = '';
+
+const actionConfig = {
+    clear_points: {
+        title: '一键清空所有积分',
+        warning: '此操作将软删除所有用户的全部积分记录。请确认您已备份数据。',
+        submitText: '确认清空所有积分',
+        formAction: '{{ url_for("clear_all_points") }}',
+        phrase: '清空积分'
+    },
+    init_system: {
+        title: '一键初始化系统',
+        warning: '此操作将删除所有签到记录、请假记录、积分记录、非管理员用户，并重置系统设置为默认值。此操作不可逆！',
+        submitText: '确认初始化系统',
+        formAction: '{{ url_for("system_initialize") }}',
+        phrase: '初始化系统'
+    }
+};
+
+function openConfirmModal(action) {
+    currentAction = action;
+    const config = actionConfig[action];
+    document.getElementById('confirmModalTitle').textContent = config.title;
+    document.getElementById('confirmModalWarning').textContent = config.warning;
+    document.getElementById('confirmSubmitBtn').textContent = config.submitText;
+    document.getElementById('confirmForm').action = config.formAction;
+    document.getElementById('confirmPhrase').textContent = config.phrase;
+    document.getElementById('confirmInput').value = '';
+    document.getElementById('confirmInput').placeholder = config.phrase;
+    document.getElementById('confirmSubmitBtn').disabled = true;
+    document.getElementById('confirmModal').style.display = 'block';
+    document.getElementById('confirmInput').focus();
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').style.display = 'none';
+    currentAction = '';
+}
+
+document.getElementById('confirmModal').addEventListener('click', function(e) {
+    if (e.target === this) closeConfirmModal();
+});
+
+document.getElementById('confirmInput').addEventListener('input', function() {
+    const config = actionConfig[currentAction];
+    if (config) {
+        document.getElementById('confirmSubmitBtn').disabled = (this.value.trim() !== config.phrase);
     }
 });
 </script>
